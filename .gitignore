@@ -1,0 +1,41 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Output dari build Go
+/bin/
+/build/
+/dist/
+/target/
+
+# Cache dan modul
+/vendor/
+/pkg/
+/*.prof
+*.pprof
+*.profraw
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistem
+.DS_Store
+Thumbs.db
+
+# Coverage & logs
+*.log
+*.cover
+*.coverage
+coverage.out
+
+# Config environment
+.env
+.env.*
