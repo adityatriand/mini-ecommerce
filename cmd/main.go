@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"mini-e-commerce/internal/auth"
 	"mini-e-commerce/internal/middleware"
+	"mini-e-commerce/internal/order"
 	"mini-e-commerce/internal/product"
 	"mini-e-commerce/internal/response"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -34,13 +37,8 @@ func main() {
 		log.Fatal("failed to connect database: ", err)
 	}
 
-	err = db.AutoMigrate(&auth.User{})
-	if err != nil {
-		log.Fatal("failed to migrate database: ", err)
-	}
-
-	err = db.AutoMigrate(&product.Product{})
-	if err != nil {
+	// Run migrations (sementara di sini, untuk production pakai migration tool)
+	if err := db.AutoMigrate(&auth.User{}, &product.Product{}, &order.Order{}); err != nil {
 		log.Fatal("failed to migrate database: ", err)
 	}
 
@@ -55,14 +53,7 @@ func main() {
 	// Setup Gin
 	r := gin.Default()
 
-	// Test Endpoint
-	r.GET("/ping", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "pong",
-		})
-	})
-
-	// User Register
+	// USER
 	r.POST("/auth/register", func(c *gin.Context) {
 		var input struct {
 			Email    string `json:"email" binding:"required,email"`
@@ -117,8 +108,6 @@ func main() {
 		)
 
 	})
-
-	// User Login
 	r.POST("/auth/login", func(c *gin.Context) {
 		var input struct {
 			Email    string `json:"email" binding:"required,email"`
@@ -138,24 +127,16 @@ func main() {
 
 		var user auth.User
 		if err := db.Where("email = ?", input.Email).First(&user).Error; err != nil {
-			response.Error(
-				c,
-				http.StatusInternalServerError,
-				"Invalid Credentials",
-				response.ErrCodeInvalidCredentials,
-				err.Error(),
-			)
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				response.Error(c, http.StatusUnauthorized, "Invalid credentials", response.ErrCodeInvalidCredentials, "user not found")
+				return
+			}
+			response.Error(c, http.StatusInternalServerError, "Failed to query user", response.ErrCodeInternalServer, err.Error())
 			return
 		}
 
 		if !auth.CheckPassword(user.Password, input.Password) {
-			response.Error(
-				c,
-				http.StatusInternalServerError,
-				"Invalid Credentials",
-				response.ErrCodeInvalidCredentials,
-				err.Error(),
-			)
+			response.Error(c, http.StatusUnauthorized, "Invalid credentials", response.ErrCodeInvalidCredentials, "Invalid password")
 			return
 		}
 
@@ -175,23 +156,13 @@ func main() {
 		// set cookie
 		c.SetCookie("session_id", sessionID, 3600, "/", "localhost", false, true)
 
-		response.Success(
-			c,
-			"Login successful",
-			nil,
-		)
-	})
-
-	// Check
-	r.GET("/me", middleware.AuthMiddleware(rdb, ctx), func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		c.JSON(http.StatusOK, gin.H{
-			"message": "you are logged in",
-			"user_id": userID,
+		response.Success(c, "Login successful", gin.H{
+			"user_id":    user.ID,
+			"session_id": sessionID,
 		})
 	})
 
-	// Create Product
+	// CRUD: Products
 	r.POST("/products", middleware.AuthMiddleware(rdb, ctx), func(c *gin.Context) {
 		var input struct {
 			Name  string `json:"name" binding:"required"`
@@ -233,8 +204,6 @@ func main() {
 			product,
 		)
 	})
-
-	// Get Products
 	r.GET("/products", func(c *gin.Context) {
 		var products []product.Product
 		if err := db.Find(&products).Error; err != nil {
@@ -253,8 +222,6 @@ func main() {
 			products,
 		)
 	})
-
-	// Get By Id Products
 	r.GET("/products/:id", func(c *gin.Context) {
 		var product product.Product
 		if err := db.First(&product, c.Param("id")).Error; err != nil {
@@ -273,8 +240,6 @@ func main() {
 			product,
 		)
 	})
-
-	// Delete Product
 	r.DELETE("/products/:id", middleware.AuthMiddleware(rdb, ctx), func(c *gin.Context) {
 		var prod product.Product
 		if err := db.First(&prod, c.Param("id")).Error; err != nil {
@@ -305,8 +270,6 @@ func main() {
 			nil,
 		)
 	})
-
-	// Update Product
 	r.PATCH("/products/:id", middleware.AuthMiddleware(rdb, ctx), func(c *gin.Context) {
 		var input struct {
 			Name  *string `json:"name"`
@@ -363,6 +326,276 @@ func main() {
 			c,
 			"Product updated successfully",
 			product,
+		)
+	})
+
+	// CRUD: Orders
+	r.POST("/orders", middleware.AuthMiddleware(rdb, ctx), func(c *gin.Context) {
+		var input struct {
+			ProductID uint `json:"product_id" binding:"required"`
+			Quantity  int  `json:"quantity" binding:"required,gt=0"`
+		}
+
+		if err := c.ShouldBindJSON(&input); err != nil {
+			response.Error(
+				c,
+				http.StatusBadRequest,
+				"Invalid input request",
+				response.ErrCodeValidationError,
+				err.Error(),
+			)
+			return
+		}
+
+		var product product.Product
+		if err := db.First(&product, input.ProductID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				response.Error(
+					c,
+					http.StatusNotFound,
+					"Product not found",
+					response.ErrCodeDataNotFound,
+					"No product with given ID",
+				)
+				return
+			}
+
+			response.Error(
+				c,
+				http.StatusInternalServerError,
+				"Failed to query product",
+				response.ErrCodeInternalServer,
+				err.Error(),
+			)
+			return
+		}
+
+		if input.Quantity > product.Stock {
+			response.Error(
+				c,
+				http.StatusBadRequest,
+				"Stock product not available",
+				response.ErrCodeValidationError,
+				"Quantity is more than product stock",
+			)
+			return
+		}
+
+		userIDStr, ok := c.Get("user_id")
+		if !ok {
+			response.Error(
+				c,
+				http.StatusUnauthorized,
+				"Unauthorized",
+				response.ErrCodeUnauthorized,
+				"Missing user_id in context",
+			)
+			return
+		}
+		idUint, err := strconv.ParseUint(userIDStr.(string), 10, 32)
+		if err != nil {
+			response.Error(
+				c,
+				http.StatusInternalServerError,
+				"Invalid user id in context",
+				response.ErrCodeInternalServer,
+				err.Error(),
+			)
+			return
+		}
+		uid := uint(idUint)
+
+		order := order.Order{
+			UserID:     uid,
+			ProductID:  input.ProductID,
+			Quantity:   input.Quantity,
+			TotalPrice: input.Quantity * product.Price,
+		}
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			product.Stock -= input.Quantity
+			if err := tx.Save(&product).Error; err != nil {
+				return err
+			}
+			if err := tx.Create(&order).Error; err != nil {
+				return err
+			}
+
+			return nil
+		}); err != nil {
+			response.Error(
+				c,
+				http.StatusInternalServerError,
+				"Failed to process order",
+				response.ErrCodeInternalServer,
+				err.Error(),
+			)
+			return
+		}
+
+		response.Success(
+			c,
+			"Order created successfully",
+			order,
+		)
+	})
+	r.GET("/orders", middleware.AuthMiddleware(rdb, ctx), func(c *gin.Context) {
+		var orders []order.Order
+		if err := db.Find(&orders).Error; err != nil {
+			response.Error(
+				c,
+				http.StatusInternalServerError,
+				"Failed to fetch orders",
+				response.ErrCodeInternalServer,
+				err.Error(),
+			)
+			return
+		}
+		response.Success(
+			c,
+			"Orders fetched successfully",
+			orders,
+		)
+	})
+	r.GET("/orders/:id", middleware.AuthMiddleware(rdb, ctx), func(c *gin.Context) {
+		var order order.Order
+		if err := db.First(&order, c.Param("id")).Error; err != nil {
+			response.Error(
+				c,
+				http.StatusNotFound,
+				"Failed to fetch order",
+				response.ErrCodeDataNotFound,
+				err.Error(),
+			)
+			return
+		}
+		response.Success(
+			c,
+			"Orders fetched successfully",
+			order,
+		)
+	})
+	r.DELETE("/orders/:id", middleware.AuthMiddleware(rdb, ctx), func(c *gin.Context) {
+		var ord order.Order
+		if err := db.First(&ord, c.Param("id")).Error; err != nil {
+			response.Error(c, http.StatusNotFound, "Order not found", response.ErrCodeDataNotFound, err.Error())
+			return
+		}
+
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			// restore stock
+			var prod product.Product
+			if err := tx.First(&prod, ord.ProductID).Error; err != nil {
+				return err
+			}
+			prod.Stock += ord.Quantity
+			if err := tx.Save(&prod).Error; err != nil {
+				return err
+			}
+			if err := tx.Delete(&ord).Error; err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			response.Error(c, http.StatusInternalServerError, "Failed to delete order", response.ErrCodeInternalServer, err.Error())
+			return
+		}
+
+		response.Success(c, "Order deleted successfully", nil)
+	})
+	r.PATCH("/orders/:id", middleware.AuthMiddleware(rdb, ctx), func(c *gin.Context) {
+		var input struct {
+			Quantity int `json:"quantity" binding:"required"`
+		}
+
+		if err := c.ShouldBindJSON(&input); err != nil {
+			response.Error(
+				c,
+				http.StatusBadRequest,
+				"Invalid input request",
+				response.ErrCodeValidationError,
+				err.Error(),
+			)
+			return
+		}
+
+		var order order.Order
+		if err := db.First(&order, c.Param("id")).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(
+				c,
+				http.StatusNotFound,
+				"Order not found",
+				response.ErrCodeDataNotFound,
+				"No order with given ID",
+			)
+			return
+		}
+
+		userIDStr, _ := c.Get("user_id")
+		uid, _ := strconv.ParseUint(userIDStr.(string), 10, 32)
+		if order.UserID != uint(uid) {
+			response.Error(
+				c,
+				http.StatusForbidden,
+				"Not allowed to update this order",
+				response.ErrCodeForbidden,
+				"Order does not belong to user",
+			)
+			return
+		}
+
+		var product product.Product
+		if err := db.First(&product, order.ProductID).Error; err != nil {
+			response.Error(
+				c,
+				http.StatusInternalServerError,
+				"Failed to fetch product",
+				response.ErrCodeInternalServer,
+				err.Error(),
+			)
+			return
+		}
+
+		diff := input.Quantity - order.Quantity
+		if diff > 0 && diff > product.Stock {
+			response.Error(
+				c,
+				http.StatusBadRequest,
+				"Stock product not available",
+				response.ErrCodeValidationError,
+				"Quantity exceeds product stock",
+			)
+			return
+		}
+
+		err := db.Transaction(func(tx *gorm.DB) error {
+			product.Stock -= diff
+			if err := tx.Save(&product).Error; err != nil {
+				return err
+			}
+
+			order.Quantity = input.Quantity
+			order.TotalPrice = input.Quantity * product.Price
+			if err := tx.Save(&order).Error; err != nil {
+				return err
+			}
+			return nil
+		})
+
+		if err != nil {
+			response.Error(
+				c,
+				http.StatusInternalServerError,
+				"Failed to update order",
+				response.ErrCodeInternalServer,
+				err.Error(),
+			)
+			return
+		}
+
+		response.Success(
+			c,
+			"Order updated successfully",
+			order,
 		)
 	})
 
