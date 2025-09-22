@@ -1,17 +1,14 @@
 package auth
 
 import (
-	"time"
+	"errors"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
-type User struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	Email     string    `gorm:"uniqueIndex;not null" json:"email"`
-	Password  string    `gorm:"not null" json:"password"`
-	CreatedAt time.Time `json:"created_at"`
-}
+var (
+	ErrInvalidCredentials = errors.New("invalid credentials")
+)
 
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
