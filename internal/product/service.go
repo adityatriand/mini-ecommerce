@@ -2,54 +2,67 @@ package product
 
 import (
 	"context"
+	"errors"
 	"strconv"
+
+	"github.com/go-playground/validator/v10"
+	"gorm.io/gorm"
 )
 
 type Service struct {
-	repo *Repository
+	repo      *Repository
+	validator *validator.Validate
 }
 
 func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+	return &Service{
+		repo:      repo,
+		validator: validator.New(),
+	}
 }
 
-func (s *Service) Create(ctx context.Context, p *Product) error {
-	return s.repo.Create(ctx, p)
-}
 
-func (s *Service) GetAll(ctx context.Context) ([]Product, error) {
+func (s *Service) GetAllProducts(ctx context.Context) ([]Product, error) {
 	return s.repo.FindAll(ctx)
 }
 
-func (s *Service) GetByID(ctx context.Context, id uint) (Product, error) {
-	return s.repo.FindByID(ctx, id)
+func (s *Service) GetProductByID(ctx context.Context, id uint) (*Product, error) {
+	product, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New(ErrProductNotFound)
+		}
+		return nil, err
+	}
+	return &product, nil
 }
 
-func (s *Service) Update(ctx context.Context, p *Product) error {
-	return s.repo.Update(ctx, p)
-}
+func (s *Service) CreateProduct(ctx context.Context, input CreateProductRequest) (*Product, error) {
+	if err := s.validator.Struct(input); err != nil {
+		return nil, err
+	}
 
-func (s *Service) Delete(ctx context.Context, id uint) error {
-	return s.repo.Delete(ctx, id)
-}
-
-func (s *Service) CreateProduct(ctx context.Context, input CreateProductInput) (*Product, error) {
 	product := Product{
 		Name:  input.Name,
 		Price: input.Price,
 		Stock: input.Stock,
 	}
-
 	if err := s.repo.Create(ctx, &product); err != nil {
 		return nil, err
 	}
-
 	return &product, nil
 }
 
-func (s *Service) UpdateProduct(ctx context.Context, id uint, input UpdateProductInput) (*Product, error) {
+func (s *Service) UpdateProduct(ctx context.Context, id uint, input UpdateProductRequest) (*Product, error) {
+	if err := s.validator.Struct(input); err != nil {
+		return nil, err
+	}
+
 	product, err := s.repo.FindByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New(ErrProductNotFound)
+		}
 		return nil, err
 	}
 
@@ -62,12 +75,21 @@ func (s *Service) UpdateProduct(ctx context.Context, id uint, input UpdateProduc
 	if input.Stock != nil {
 		product.Stock = *input.Stock
 	}
-
 	if err := s.repo.Update(ctx, &product); err != nil {
 		return nil, err
 	}
-
 	return &product, nil
+}
+
+func (s *Service) DeleteProduct(ctx context.Context, id uint) error {
+	_, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New(ErrProductNotFound)
+		}
+		return err
+	}
+	return s.repo.Delete(ctx, id)
 }
 
 func (s *Service) ParseIDFromString(idStr string) (uint, error) {
@@ -77,3 +99,8 @@ func (s *Service) ParseIDFromString(idStr string) (uint, error) {
 	}
 	return uint(id), nil
 }
+
+const (
+	ErrProductNotFound = "product not found"
+)
+
