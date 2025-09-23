@@ -16,6 +16,12 @@ func main() {
 	rdb := database.ConnectRedis(cfg.RedisAddr, cfg.RedisPassword)
 
 	r := gin.Default()
+	
+	// Set trusted proxies for security
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatal("Failed to set trusted proxies: ", err)
+	}
+	
 	routes.RegisterRoutes(r, db, rdb)
 
 	port := cfg.Port
