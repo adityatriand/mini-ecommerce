@@ -12,146 +12,174 @@ import (
 	"gorm.io/gorm"
 )
 
-func RegisterRoutes(r *gin.RouterGroup, db *gorm.DB, rdb *redis.Client) {
-	repo := NewRepository(db)
-	service := NewService(repo, db)
+const (
+	ErrMsgInvalidOrderID     = "Invalid order ID"
+	ErrMsgOrderNotFound      = "Order not found"
+	ErrMsgProductNotFound    = "Product not found"
+	ErrMsgInsufficientStock  = "Stock product not available"
+	ErrMsgNotAuthorized      = "Not allowed to update this order"
+	ErrMsgInvalidStatus      = "Invalid status value"
+	ErrMsgUnauthorized       = "Unauthorized"
+	ErrMsgInvalidInput       = "Invalid input request"
+	ErrMsgInvalidUserContext = "Invalid user id in context"
+	ErrMsgFailedToProcess    = "Failed to process order"
+	ErrMsgFailedToFetch      = "Failed to fetch order"
+	ErrMsgFailedToDelete     = "Failed to delete order"
+	ErrMsgFailedToUpdate     = "Failed to update order"
+)
 
+type Handler struct {
+	service *Service
+}
+
+func NewHandler(service *Service) *Handler {
+	return &Handler{service: service}
+}
+
+func (h *Handler) RegisterRoutes(r *gin.RouterGroup, rdb *redis.Client) {
 	group := r.Group("/orders", middleware.AuthMiddleware(rdb))
-	{
-		group.POST("", func(c *gin.Context) {
-			var input CreateOrderInput
 
-			if err := c.ShouldBindJSON(&input); err != nil {
-				response.Error(c, http.StatusBadRequest, "Invalid input request", response.ErrCodeValidationError, err.Error())
-				return
-			}
+	group.POST("", h.CreateOrder)
+	group.GET("", h.GetOrders)
+	group.GET("/:id", h.GetOrderByID)
+	group.DELETE("/:id", h.DeleteOrder)
+	group.PATCH("/:id", h.UpdateOrder)
+}
 
-			userIDStr, ok := c.Get("user_id")
-			if !ok {
-				response.Error(c, http.StatusUnauthorized, "Unauthorized", response.ErrCodeUnauthorized, "Missing user_id in context")
-				return
-			}
-
-			userID, err := service.ParseUserIDFromString(userIDStr.(string))
-			if err != nil {
-				response.Error(c, http.StatusInternalServerError, "Invalid user id in context", response.ErrCodeInternalServer, err.Error())
-				return
-			}
-
-			order, err := service.CreateOrder(c.Request.Context(), input, userID)
-			if err != nil {
-				if err.Error() == "product not found" {
-					response.Error(c, http.StatusNotFound, "Product not found", response.ErrCodeDataNotFound, err.Error())
-					return
-				}
-				if err.Error() == "insufficient stock" {
-					response.Error(c, http.StatusBadRequest, "Stock product not available", response.ErrCodeValidationError, err.Error())
-					return
-				}
-				response.Error(c, http.StatusInternalServerError, "Failed to process order", response.ErrCodeInternalServer, err.Error())
-				return
-			}
-
-			response.Success(c, "Order created successfully", order)
-		})
-
-		group.GET("", func(c *gin.Context) {
-			orders, err := service.GetAll(c.Request.Context())
-			if err != nil {
-				response.Error(c, http.StatusInternalServerError, "Failed to fetch orders", response.ErrCodeInternalServer, err.Error())
-				return
-			}
-			response.Success(c, "Orders fetched successfully", orders)
-		})
-
-		group.GET("/:id", func(c *gin.Context) {
-			id, err := service.ParseIDFromString(c.Param("id"))
-			if err != nil {
-				response.Error(c, http.StatusBadRequest, "Invalid order ID", response.ErrCodeValidationError, err.Error())
-				return
-			}
-
-			ord, err := service.GetByID(c.Request.Context(), id)
-			if err != nil {
-				if errors.Is(err, gorm.ErrRecordNotFound) {
-					response.Error(c, http.StatusNotFound, "Order not found", response.ErrCodeDataNotFound, "No order with given ID")
-					return
-				}
-				response.Error(c, http.StatusInternalServerError, "Failed to fetch order", response.ErrCodeInternalServer, err.Error())
-				return
-			}
-			response.Success(c, "Order fetched successfully", ord)
-		})
-
-		group.DELETE("/:id", func(c *gin.Context) {
-			id, err := service.ParseIDFromString(c.Param("id"))
-			if err != nil {
-				response.Error(c, http.StatusBadRequest, "Invalid order ID", response.ErrCodeValidationError, err.Error())
-				return
-			}
-
-			err = service.DeleteOrder(c.Request.Context(), id)
-			if err != nil {
-				if err.Error() == "order not found" {
-					response.Error(c, http.StatusNotFound, "Order not found", response.ErrCodeDataNotFound, err.Error())
-					return
-				}
-				response.Error(c, http.StatusInternalServerError, "Failed to delete order", response.ErrCodeInternalServer, err.Error())
-				return
-			}
-
-			response.Success(c, "Order deleted successfully", nil)
-		})
-
-		group.PATCH("/:id", func(c *gin.Context) {
-			var input UpdateOrderInput
-			if err := c.ShouldBindJSON(&input); err != nil {
-				response.Error(c, http.StatusBadRequest, "Invalid input request", response.ErrCodeValidationError, err.Error())
-				return
-			}
-
-			id, err := service.ParseIDFromString(c.Param("id"))
-			if err != nil {
-				response.Error(c, http.StatusBadRequest, "Invalid order ID", response.ErrCodeValidationError, err.Error())
-				return
-			}
-
-			userIDStr, ok := c.Get("user_id")
-			if !ok {
-				response.Error(c, http.StatusUnauthorized, "Unauthorized", response.ErrCodeUnauthorized, "Missing user_id in context")
-				return
-			}
-
-			userID, err := service.ParseUserIDFromString(userIDStr.(string))
-			if err != nil {
-				response.Error(c, http.StatusInternalServerError, "Invalid user id in context", response.ErrCodeInternalServer, err.Error())
-				return
-			}
-
-			order, err := service.UpdateOrder(c.Request.Context(), id, input, userID)
-			if err != nil {
-				if err.Error() == "order not found" {
-					response.Error(c, http.StatusNotFound, "Order not found", response.ErrCodeDataNotFound, err.Error())
-					return
-				}
-				if err.Error() == "not authorized to update this order" {
-					response.Error(c, http.StatusForbidden, "Not allowed to update this order", response.ErrCodeForbidden, err.Error())
-					return
-				}
-				if err.Error() == "invalid status value" {
-					response.Error(c, http.StatusBadRequest, "Invalid status value", response.ErrCodeValidationError, err.Error())
-					return
-				}
-				if err.Error() == "insufficient stock for quantity update" {
-					response.Error(c, http.StatusBadRequest, "Stock product not available", response.ErrCodeValidationError, err.Error())
-					return
-				}
-				response.Error(c, http.StatusInternalServerError, "Failed to update order", response.ErrCodeInternalServer, err.Error())
-				return
-			}
-
-			response.Success(c, "Order updated successfully", order)
-		})
-
+func (h *Handler) CreateOrder(c *gin.Context) {
+	var input CreateOrderRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, http.StatusBadRequest, ErrMsgInvalidInput, response.ErrCodeValidationError, err.Error())
+		return
 	}
+
+	userID, err := h.getUserIDFromContext(c)
+	if err != nil {
+		if err.Error() == "missing user_id in context" {
+			response.Error(c, http.StatusUnauthorized, ErrMsgUnauthorized, response.ErrCodeUnauthorized, err.Error())
+		} else {
+			response.Error(c, http.StatusInternalServerError, ErrMsgInvalidUserContext, response.ErrCodeInternalServer, err.Error())
+		}
+		return
+	}
+
+	order, err := h.service.CreateOrder(c.Request.Context(), input, userID)
+	if err != nil {
+		if err.Error() == ErrProductNotFound {
+			response.Error(c, http.StatusNotFound, ErrMsgProductNotFound, response.ErrCodeDataNotFound, err.Error())
+			return
+		}
+		if err.Error() == ErrInsufficientStock {
+			response.Error(c, http.StatusBadRequest, ErrMsgInsufficientStock, response.ErrCodeValidationError, err.Error())
+			return
+		}
+		response.Error(c, http.StatusInternalServerError, ErrMsgFailedToProcess, response.ErrCodeInternalServer, err.Error())
+		return
+	}
+
+	response.Success(c, "Order created successfully", order)
+}
+
+func (h *Handler) GetOrders(c *gin.Context) {
+	orders, err := h.service.GetAllOrders(c.Request.Context())
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, ErrMsgFailedToFetch, response.ErrCodeInternalServer, err.Error())
+		return
+	}
+	response.Success(c, "Orders fetched successfully", orders)
+}
+
+func (h *Handler) GetOrderByID(c *gin.Context) {
+	id, err := h.service.ParseIDFromString(c.Param("id"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, ErrMsgInvalidOrderID, response.ErrCodeValidationError, err.Error())
+		return
+	}
+
+	order, err := h.service.GetOrderByID(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(c, http.StatusNotFound, ErrMsgOrderNotFound, response.ErrCodeDataNotFound, "No order with given ID")
+			return
+		}
+		response.Error(c, http.StatusInternalServerError, ErrMsgFailedToFetch, response.ErrCodeInternalServer, err.Error())
+		return
+	}
+	response.Success(c, "Order fetched successfully", order)
+}
+
+func (h *Handler) DeleteOrder(c *gin.Context) {
+	id, err := h.service.ParseIDFromString(c.Param("id"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, ErrMsgInvalidOrderID, response.ErrCodeValidationError, err.Error())
+		return
+	}
+
+	err = h.service.DeleteOrder(c.Request.Context(), id)
+	if err != nil {
+		if err.Error() == ErrOrderNotFound {
+			response.Error(c, http.StatusNotFound, ErrMsgOrderNotFound, response.ErrCodeDataNotFound, err.Error())
+			return
+		}
+		response.Error(c, http.StatusInternalServerError, ErrMsgFailedToDelete, response.ErrCodeInternalServer, err.Error())
+		return
+	}
+
+	response.Success(c, "Order deleted successfully", nil)
+}
+
+func (h *Handler) UpdateOrder(c *gin.Context) {
+	var input UpdateOrderRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, http.StatusBadRequest, ErrMsgInvalidInput, response.ErrCodeValidationError, err.Error())
+		return
+	}
+
+	id, err := h.service.ParseIDFromString(c.Param("id"))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, ErrMsgInvalidOrderID, response.ErrCodeValidationError, err.Error())
+		return
+	}
+
+	userID, err := h.getUserIDFromContext(c)
+	if err != nil {
+		if err.Error() == "missing user_id in context" {
+			response.Error(c, http.StatusUnauthorized, ErrMsgUnauthorized, response.ErrCodeUnauthorized, err.Error())
+		} else {
+			response.Error(c, http.StatusInternalServerError, ErrMsgInvalidUserContext, response.ErrCodeInternalServer, err.Error())
+		}
+		return
+	}
+
+	order, err := h.service.UpdateOrder(c.Request.Context(), id, input, userID)
+	if err != nil {
+		if err.Error() == ErrOrderNotFound {
+			response.Error(c, http.StatusNotFound, ErrMsgOrderNotFound, response.ErrCodeDataNotFound, err.Error())
+			return
+		}
+		if err.Error() == ErrNotAuthorizedToUpdate {
+			response.Error(c, http.StatusForbidden, ErrMsgNotAuthorized, response.ErrCodeForbidden, err.Error())
+			return
+		}
+		if err.Error() == ErrInvalidStatusValue {
+			response.Error(c, http.StatusBadRequest, ErrMsgInvalidStatus, response.ErrCodeValidationError, err.Error())
+			return
+		}
+		if err.Error() == ErrInsufficientStockForUpdate {
+			response.Error(c, http.StatusBadRequest, ErrMsgInsufficientStock, response.ErrCodeValidationError, err.Error())
+			return
+		}
+		response.Error(c, http.StatusInternalServerError, ErrMsgFailedToUpdate, response.ErrCodeInternalServer, err.Error())
+		return
+	}
+
+	response.Success(c, "Order updated successfully", order)
+}
+
+func (h *Handler) getUserIDFromContext(c *gin.Context) (uint, error) {
+	userIDStr, ok := c.Get("user_id")
+	if !ok {
+		return 0, errors.New("missing user_id in context")
+	}
+	return h.service.ParseUserIDFromString(userIDStr.(string))
 }

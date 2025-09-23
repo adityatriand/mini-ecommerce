@@ -10,15 +10,3 @@ type Product struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
-
-type CreateProductInput struct {
-	Name  string `json:"name" binding:"required"`
-	Price int    `json:"price" binding:"required"`
-	Stock int    `json:"stock" binding:"required"`
-}
-
-type UpdateProductInput struct {
-	Name  *string `json:"name"`
-	Price *int    `json:"price"`
-	Stock *int    `json:"stock"`
-}

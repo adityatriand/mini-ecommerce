@@ -29,3 +29,17 @@ func (r *Repository) FindByID(ctx context.Context, id uint) (User, error) {
 	err := r.db.WithContext(ctx).First(&user, id).Error
 	return user, err
 }
+
+func (r *Repository) Update(ctx context.Context, user *User) error {
+	return r.db.WithContext(ctx).Save(user).Error
+}
+
+func (r *Repository) Delete(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Delete(&User{}, id).Error
+}
+
+func (r *Repository) FindAll(ctx context.Context) ([]User, error) {
+	var users []User
+	err := r.db.WithContext(ctx).Find(&users).Error
+	return users, err
+}

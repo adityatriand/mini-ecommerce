@@ -13,7 +13,19 @@ import (
 func RegisterRoutes(r *gin.Engine, db *gorm.DB, rdb *redis.Client) {
 	api := r.Group("/api")
 
-	auth.RegisterRoutes(api, db, rdb)
-	product.RegisterRoutes(api, db, rdb)
-	order.RegisterRoutes(api, db, rdb)
+	authRepo := auth.NewRepository(db)
+	authService := auth.NewService(authRepo, rdb)
+	authHandler := auth.NewHandler(authService)
+	authHandler.RegisterRoutes(api)
+
+	productRepo := product.NewRepository(db)
+	productService := product.NewService(productRepo)
+	productHandler := product.NewHandler(productService)
+	productHandler.RegisterRoutes(api, rdb)
+
+	orderRepo := order.NewRepository(db)
+	orderService := order.NewService(orderRepo, productRepo)
+	orderHandler := order.NewHandler(orderService)
+	orderHandler.RegisterRoutes(api, rdb)
+
 }

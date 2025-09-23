@@ -7,154 +7,141 @@ import (
 
 	"mini-e-commerce/internal/product"
 
+	"github.com/go-playground/validator/v10"
 	"gorm.io/gorm"
 )
 
+const (
+	ErrOrderNotFound                    = "order not found"
+	ErrProductNotFound                  = "product not found"
+	ErrInsufficientStock                = "insufficient stock"
+	ErrNotAuthorizedToUpdate            = "not authorized to update this order"
+	ErrInvalidStatusValue               = "invalid status value"
+	ErrCannotUpdateBothQuantityAndStatus = "cannot update both quantity and status simultaneously"
+	ErrCannotChangePaidOrderToPending   = "cannot change paid order back to pending"
+	ErrCannotChangeCancelledOrderStatus = "cannot change cancelled order status"
+	ErrInsufficientStockForUpdate       = "insufficient stock for quantity update"
+)
+
 type Service struct {
-	repo *Repository
-	db   *gorm.DB
+	repo        *Repository
+	productRepo *product.Repository
+	validator   *validator.Validate
 }
 
-func NewService(repo *Repository, db *gorm.DB) *Service {
-	return &Service{repo: repo, db: db}
+func NewService(repo *Repository, productRepo *product.Repository) *Service {
+	return &Service{
+		repo:        repo,
+		productRepo: productRepo,
+		validator:   validator.New(),
+	}
 }
 
-func (s *Service) Create(ctx context.Context, p *Order) error {
-	return s.repo.Create(ctx, p)
-}
+func (s *Service) CreateOrder(ctx context.Context, input CreateOrderRequest, userID uint) (*Order, error) {
+	if err := s.validator.Struct(input); err != nil {
+		return nil, err
+	}
 
-func (s *Service) GetAll(ctx context.Context) ([]Order, error) {
-	return s.repo.FindAll(ctx)
-}
+	if userID == 0 {
+		return nil, errors.New("user ID is required")
+	}
 
-func (s *Service) GetByID(ctx context.Context, id uint) (Order, error) {
-	return s.repo.FindByID(ctx, id)
-}
-
-func (s *Service) Update(ctx context.Context, p *Order) error {
-	return s.repo.Update(ctx, p)
-}
-
-func (s *Service) Delete(ctx context.Context, id uint) error {
-	return s.repo.Delete(ctx, id)
-}
-
-func (s *Service) CreateOrder(ctx context.Context, input CreateOrderInput, userID uint) (*Order, error) {
-	var prod product.Product
-	if err := s.db.First(&prod, input.ProductID).Error; err != nil {
+	product, err := s.productRepo.FindByID(ctx, input.ProductID)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("product not found")
+			return nil, errors.New(ErrProductNotFound)
 		}
 		return nil, err
 	}
 
-	if input.Quantity > prod.Stock {
-		return nil, errors.New("insufficient stock")
+	if input.Quantity > product.Stock {
+		return nil, errors.New(ErrInsufficientStock)
 	}
 
 	order := Order{
 		UserID:     userID,
 		ProductID:  input.ProductID,
 		Quantity:   input.Quantity,
-		TotalPrice: input.Quantity * prod.Price,
+		TotalPrice: input.Quantity * product.Price,
+		Status:     StatusPending,
 	}
 
-	err := s.db.Transaction(func(tx *gorm.DB) error {
-		prod.Stock -= input.Quantity
-		if err := tx.Save(&prod).Error; err != nil {
-			return err
-		}
-		
-		return tx.Create(&order).Error
-	})
-
-	if err != nil {
+	// Kurangi stok lalu simpan lewat repo (repo sudah handle transaction)
+	product.Stock -= input.Quantity
+	if err := s.repo.Create(ctx, &order); err != nil {
 		return nil, err
 	}
 
 	return &order, nil
 }
 
-func (s *Service) UpdateOrder(ctx context.Context, id uint, input UpdateOrderInput, userID uint) (*Order, error) {
-	var order Order
-	if err := s.db.First(&order, id).Error; err != nil {
+func (s *Service) GetAllOrders(ctx context.Context) ([]Order, error) {
+	return s.repo.FindAll(ctx)
+}
+
+func (s *Service) GetOrderByID(ctx context.Context, id uint) (*Order, error) {
+	order, err := s.repo.FindByID(ctx, id)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("order not found")
+			return nil, errors.New(ErrOrderNotFound)
+		}
+		return nil, err
+	}
+	return &order, nil
+}
+
+func (s *Service) UpdateOrder(ctx context.Context, id uint, input UpdateOrderRequest, userID uint) (*Order, error) {
+	if err := s.validator.Struct(input); err != nil {
+		return nil, err
+	}
+
+	order, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New(ErrOrderNotFound)
 		}
 		return nil, err
 	}
 
 	if order.UserID != userID {
-		return nil, errors.New("not authorized to update this order")
+		return nil, errors.New(ErrNotAuthorizedToUpdate)
+	}
+
+	if err := s.validateStatusTransition(&order, input.Status); err != nil {
+		return nil, err
+	}
+
+	if input.Quantity != nil && input.Status != nil {
+		return nil, errors.New(ErrCannotUpdateBothQuantityAndStatus)
 	}
 
 	if input.Status != nil {
-		switch *input.Status {
-		case StatusPending, StatusPaid, StatusCancelled:
-		default:
-			return nil, errors.New("invalid status value")
-		}
+		return s.updateOrderStatus(ctx, &order, *input.Status)
 	}
 
 	if input.Quantity != nil {
-		var prod product.Product
-		if err := s.db.First(&prod, order.ProductID).Error; err != nil {
-			return nil, err
-		}
-
-		diff := *input.Quantity - order.Quantity
-		if diff > 0 && diff > prod.Stock {
-			return nil, errors.New("insufficient stock for quantity update")
-		}
-
-		err := s.db.Transaction(func(tx *gorm.DB) error {
-				prod.Stock -= diff
-			if err := tx.Save(&prod).Error; err != nil {
-				return err
-			}
-
-			order.Quantity = *input.Quantity
-			order.TotalPrice = *input.Quantity * prod.Price
-			if input.Status != nil {
-				order.Status = *input.Status
-			}
-			return tx.Save(&order).Error
-		})
-
-		if err != nil {
-			return nil, err
-		}
-	} else if input.Status != nil {
-		order.Status = *input.Status
-		if err := s.db.Save(&order).Error; err != nil {
-			return nil, err
-		}
+		return s.updateOrderQuantity(ctx, &order, *input.Quantity)
 	}
 
 	return &order, nil
 }
 
 func (s *Service) DeleteOrder(ctx context.Context, id uint) error {
-	var order Order
-	if err := s.db.First(&order, id).Error; err != nil {
+	order, err := s.repo.FindByID(ctx, id)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("order not found")
+			return errors.New(ErrOrderNotFound)
 		}
 		return err
 	}
 
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		var prod product.Product
-		if err := tx.First(&prod, order.ProductID).Error; err != nil {
-			return err
-		}
-		prod.Stock += order.Quantity
-		if err := tx.Save(&prod).Error; err != nil {
-			return err
-		}
+	product, err := s.productRepo.FindByID(ctx, order.ProductID)
+	if err != nil {
+		return err
+	}
 
-		return tx.Delete(&order).Error
-	})
+	product.Stock += order.Quantity
+	return s.repo.Delete(ctx, id)
 }
 
 func (s *Service) ParseIDFromString(idStr string) (uint, error) {
@@ -172,3 +159,68 @@ func (s *Service) ParseUserIDFromString(userIDStr string) (uint, error) {
 	}
 	return uint(uid), nil
 }
+
+// Helpers
+func (s *Service) validateStatusTransition(order *Order, newStatus *OrderStatus) error {
+	if newStatus == nil {
+		return nil
+	}
+	switch *newStatus {
+	case StatusPending, StatusPaid, StatusCancelled:
+	default:
+		return errors.New(ErrInvalidStatusValue)
+	}
+	if order.Status == StatusPaid && *newStatus == StatusPending {
+		return errors.New(ErrCannotChangePaidOrderToPending)
+	}
+	if order.Status == StatusCancelled && *newStatus != StatusCancelled {
+		return errors.New(ErrCannotChangeCancelledOrderStatus)
+	}
+	return nil
+}
+
+func (s *Service) updateOrderStatus(ctx context.Context, order *Order, newStatus OrderStatus) (*Order, error) {
+	if newStatus == StatusCancelled && order.Status != StatusCancelled {
+		product, err := s.productRepo.FindByID(ctx, order.ProductID)
+		if err != nil {
+			return nil, err
+		}
+		product.Stock += order.Quantity
+		if err := s.repo.Update(ctx, order, &product, func(o *Order) {
+			o.Status = newStatus
+		}); err != nil {
+			return nil, err
+		}
+		return order, nil
+	}
+
+	if err := s.repo.Update(ctx, order, nil, func(o *Order) {
+		o.Status = newStatus
+	}); err != nil {
+		return nil, err
+	}
+	return order, nil
+}
+
+func (s *Service) updateOrderQuantity(ctx context.Context, order *Order, newQuantity int) (*Order, error) {
+	product, err := s.productRepo.FindByID(ctx, order.ProductID)
+	if err != nil {
+		return nil, err
+	}
+
+	diff := newQuantity - order.Quantity
+	if diff > 0 && diff > product.Stock {
+		return nil, errors.New(ErrInsufficientStockForUpdate)
+	}
+
+	product.Stock -= diff
+	if err := s.repo.Update(ctx, order, &product, func(o *Order) {
+		o.Quantity = newQuantity
+		o.TotalPrice = newQuantity * product.Price
+	}); err != nil {
+		return nil, err
+	}
+
+	return order, nil
+}
+
