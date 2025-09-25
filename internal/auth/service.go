@@ -16,30 +16,41 @@ const (
 	SessionTimeout    = 3600 * time.Second
 	SessionKeyPrefix  = "session:"
 	MinPasswordLength = 8
-	
+
 	// Error constants
-	ErrEmailAlreadyExists     = "email already exists"
-	ErrUserNotFound          = "user not found"
-	ErrWeakPassword          = "password must be at least 8 characters long"
-	ErrInvalidEmailFormat    = "invalid email format"
-	ErrPasswordRequired      = "password is required"
+	ErrEmailAlreadyExists = "email already exists"
+	ErrUserNotFound       = "user not found"
+	ErrWeakPassword       = "password must be at least 8 characters long"
+	ErrInvalidEmailFormat = "invalid email format"
+	ErrPasswordRequired   = "password is required"
 )
 
-type Service struct {
-	repo      *Repository
+type Service interface {
+	RegisterUser(ctx context.Context, input RegisterRequest) (*User, error)
+	LoginUser(ctx context.Context, input LoginRequest) (*User, string, error)
+	LogoutUser(ctx context.Context, sessionID string) error
+	ValidateSession(ctx context.Context, sessionID string) (uint, error)
+	GetUserByID(ctx context.Context, id uint) (*User, error)
+	UpdateUser(ctx context.Context, id uint, input UpdateUserRequest) (*User, error)
+	DeleteUser(ctx context.Context, id uint) error
+	GetAllUsers(ctx context.Context) ([]User, error)
+}
+
+type service struct {
+	repo      Repository
 	rdb       *redis.Client
 	validator *validator.Validate
 }
 
-func NewService(repo *Repository, rdb *redis.Client) *Service {
-	return &Service{
+func NewService(repo Repository, rdb *redis.Client) Service {
+	return &service{
 		repo:      repo,
 		rdb:       rdb,
 		validator: validator.New(),
 	}
 }
 
-func (s *Service) RegisterUser(ctx context.Context, input RegisterRequest) (*User, error) {
+func (s *service) RegisterUser(ctx context.Context, input RegisterRequest) (*User, error) {
 	if err := s.validator.Struct(input); err != nil {
 		return nil, err
 	}
@@ -70,7 +81,7 @@ func (s *Service) RegisterUser(ctx context.Context, input RegisterRequest) (*Use
 	return &user, nil
 }
 
-func (s *Service) LoginUser(ctx context.Context, input LoginRequest) (*User, string, error) {
+func (s *service) LoginUser(ctx context.Context, input LoginRequest) (*User, string, error) {
 	if err := s.validator.Struct(input); err != nil {
 		return nil, "", err
 	}
@@ -95,26 +106,26 @@ func (s *Service) LoginUser(ctx context.Context, input LoginRequest) (*User, str
 	return &user, sessionID, nil
 }
 
-func (s *Service) LogoutUser(ctx context.Context, sessionID string) error {
+func (s *service) LogoutUser(ctx context.Context, sessionID string) error {
 	return s.rdb.Del(ctx, SessionKeyPrefix+sessionID).Err()
 }
 
-func (s *Service) ValidateSession(ctx context.Context, sessionID string) (uint, error) {
+func (s *service) ValidateSession(ctx context.Context, sessionID string) (uint, error) {
 	userIDStr, err := s.rdb.Get(ctx, SessionKeyPrefix+sessionID).Result()
 	if err != nil {
 		return 0, err
 	}
-	
+
 	// Parse user ID from redis value
 	userID := 0
 	if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil {
 		return 0, err
 	}
-	
+
 	return uint(userID), nil
 }
 
-func (s *Service) GetUserByID(ctx context.Context, id uint) (*User, error) {
+func (s *service) GetUserByID(ctx context.Context, id uint) (*User, error) {
 	user, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -125,7 +136,7 @@ func (s *Service) GetUserByID(ctx context.Context, id uint) (*User, error) {
 	return &user, nil
 }
 
-func (s *Service) UpdateUser(ctx context.Context, id uint, input UpdateUserRequest) (*User, error) {
+func (s *service) UpdateUser(ctx context.Context, id uint, input UpdateUserRequest) (*User, error) {
 	if err := s.validator.Struct(input); err != nil {
 		return nil, err
 	}
@@ -157,7 +168,7 @@ func (s *Service) UpdateUser(ctx context.Context, id uint, input UpdateUserReque
 	return &user, nil
 }
 
-func (s *Service) DeleteUser(ctx context.Context, id uint) error {
+func (s *service) DeleteUser(ctx context.Context, id uint) error {
 	_, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -169,7 +180,6 @@ func (s *Service) DeleteUser(ctx context.Context, id uint) error {
 	return s.repo.Delete(ctx, id)
 }
 
-func (s *Service) GetAllUsers(ctx context.Context) ([]User, error) {
+func (s *service) GetAllUsers(ctx context.Context) ([]User, error) {
 	return s.repo.FindAll(ctx)
 }
-
