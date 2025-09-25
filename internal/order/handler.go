@@ -29,10 +29,10 @@ const (
 )
 
 type Handler struct {
-	service *Service
+	service Service
 }
 
-func NewHandler(service *Service) *Handler {
+func NewHandler(service Service) *Handler {
 	return &Handler{service: service}
 }
 
@@ -90,7 +90,7 @@ func (h *Handler) GetOrders(c *gin.Context) {
 }
 
 func (h *Handler) GetOrderByID(c *gin.Context) {
-	id, err := h.service.ParseIDFromString(c.Param("id"))
+	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, ErrMsgInvalidOrderID, response.ErrCodeValidationError, err.Error())
 		return
@@ -109,7 +109,7 @@ func (h *Handler) GetOrderByID(c *gin.Context) {
 }
 
 func (h *Handler) DeleteOrder(c *gin.Context) {
-	id, err := h.service.ParseIDFromString(c.Param("id"))
+	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, ErrMsgInvalidOrderID, response.ErrCodeValidationError, err.Error())
 		return
@@ -135,7 +135,7 @@ func (h *Handler) UpdateOrder(c *gin.Context) {
 		return
 	}
 
-	id, err := h.service.ParseIDFromString(c.Param("id"))
+	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, ErrMsgInvalidOrderID, response.ErrCodeValidationError, err.Error())
 		return
@@ -176,10 +176,11 @@ func (h *Handler) UpdateOrder(c *gin.Context) {
 	response.Success(c, "Order updated successfully", order)
 }
 
+// Helpers
 func (h *Handler) getUserIDFromContext(c *gin.Context) (uint, error) {
 	userIDStr, ok := c.Get("user_id")
 	if !ok {
 		return 0, errors.New("missing user_id in context")
 	}
-	return h.service.ParseUserIDFromString(userIDStr.(string))
+	return ParseUserIDFromString(userIDStr.(string))
 }

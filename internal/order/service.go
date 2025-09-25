@@ -3,7 +3,6 @@ package order
 import (
 	"context"
 	"errors"
-	"strconv"
 
 	"mini-e-commerce/internal/product"
 
@@ -12,32 +11,40 @@ import (
 )
 
 const (
-	ErrOrderNotFound                    = "order not found"
-	ErrProductNotFound                  = "product not found"
-	ErrInsufficientStock                = "insufficient stock"
-	ErrNotAuthorizedToUpdate            = "not authorized to update this order"
-	ErrInvalidStatusValue               = "invalid status value"
+	ErrOrderNotFound                     = "order not found"
+	ErrProductNotFound                   = "product not found"
+	ErrInsufficientStock                 = "insufficient stock"
+	ErrNotAuthorizedToUpdate             = "not authorized to update this order"
+	ErrInvalidStatusValue                = "invalid status value"
 	ErrCannotUpdateBothQuantityAndStatus = "cannot update both quantity and status simultaneously"
-	ErrCannotChangePaidOrderToPending   = "cannot change paid order back to pending"
-	ErrCannotChangeCancelledOrderStatus = "cannot change cancelled order status"
-	ErrInsufficientStockForUpdate       = "insufficient stock for quantity update"
+	ErrCannotChangePaidOrderToPending    = "cannot change paid order back to pending"
+	ErrCannotChangeCancelledOrderStatus  = "cannot change cancelled order status"
+	ErrInsufficientStockForUpdate        = "insufficient stock for quantity update"
 )
 
-type Service struct {
-	repo        *Repository
-	productRepo *product.Repository
-	validator   *validator.Validate
+type Service interface {
+	CreateOrder(ctx context.Context, input CreateOrderRequest, userID uint) (*Order, error)
+	GetAllOrders(ctx context.Context) ([]Order, error)
+	GetOrderByID(ctx context.Context, id uint) (*Order, error)
+	UpdateOrder(ctx context.Context, id uint, input UpdateOrderRequest, userID uint) (*Order, error)
+	DeleteOrder(ctx context.Context, id uint) error
 }
 
-func NewService(repo *Repository, productRepo *product.Repository) *Service {
-	return &Service{
-		repo:        repo,
-		productRepo: productRepo,
-		validator:   validator.New(),
+type service struct {
+	repo           Repository
+	productService product.Service
+	validator      *validator.Validate
+}
+
+func NewService(repo Repository, productService product.Service) Service {
+	return &service{
+		repo:           repo,
+		productService: productService,
+		validator:      validator.New(),
 	}
 }
 
-func (s *Service) CreateOrder(ctx context.Context, input CreateOrderRequest, userID uint) (*Order, error) {
+func (s *service) CreateOrder(ctx context.Context, input CreateOrderRequest, userID uint) (*Order, error) {
 	if err := s.validator.Struct(input); err != nil {
 		return nil, err
 	}
@@ -46,11 +53,8 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderRequest, use
 		return nil, errors.New("user ID is required")
 	}
 
-	product, err := s.productRepo.FindByID(ctx, input.ProductID)
+	product, err := s.productService.GetProductByID(ctx, input.ProductID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New(ErrProductNotFound)
-		}
 		return nil, err
 	}
 
@@ -66,20 +70,25 @@ func (s *Service) CreateOrder(ctx context.Context, input CreateOrderRequest, use
 		Status:     StatusPending,
 	}
 
-	// Kurangi stok lalu simpan lewat repo (repo sudah handle transaction)
-	product.Stock -= input.Quantity
+	// Reduce stock using product service
+	if err := s.productService.UpdateStock(ctx, input.ProductID, -input.Quantity); err != nil {
+		return nil, err
+	}
+
 	if err := s.repo.Create(ctx, &order); err != nil {
+		// Rollback stock if order creation fails
+		s.productService.UpdateStock(ctx, input.ProductID, input.Quantity)
 		return nil, err
 	}
 
 	return &order, nil
 }
 
-func (s *Service) GetAllOrders(ctx context.Context) ([]Order, error) {
+func (s *service) GetAllOrders(ctx context.Context) ([]Order, error) {
 	return s.repo.FindAll(ctx)
 }
 
-func (s *Service) GetOrderByID(ctx context.Context, id uint) (*Order, error) {
+func (s *service) GetOrderByID(ctx context.Context, id uint) (*Order, error) {
 	order, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -90,7 +99,7 @@ func (s *Service) GetOrderByID(ctx context.Context, id uint) (*Order, error) {
 	return &order, nil
 }
 
-func (s *Service) UpdateOrder(ctx context.Context, id uint, input UpdateOrderRequest, userID uint) (*Order, error) {
+func (s *service) UpdateOrder(ctx context.Context, id uint, input UpdateOrderRequest, userID uint) (*Order, error) {
 	if err := s.validator.Struct(input); err != nil {
 		return nil, err
 	}
@@ -126,7 +135,7 @@ func (s *Service) UpdateOrder(ctx context.Context, id uint, input UpdateOrderReq
 	return &order, nil
 }
 
-func (s *Service) DeleteOrder(ctx context.Context, id uint) error {
+func (s *service) DeleteOrder(ctx context.Context, id uint) error {
 	order, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -135,33 +144,16 @@ func (s *Service) DeleteOrder(ctx context.Context, id uint) error {
 		return err
 	}
 
-	product, err := s.productRepo.FindByID(ctx, order.ProductID)
-	if err != nil {
+	// Restore stock when deleting order
+	if err := s.productService.UpdateStock(ctx, order.ProductID, order.Quantity); err != nil {
 		return err
 	}
 
-	product.Stock += order.Quantity
 	return s.repo.Delete(ctx, id)
 }
 
-func (s *Service) ParseIDFromString(idStr string) (uint, error) {
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		return 0, err
-	}
-	return uint(id), nil
-}
-
-func (s *Service) ParseUserIDFromString(userIDStr string) (uint, error) {
-	uid, err := strconv.ParseUint(userIDStr, 10, 32)
-	if err != nil {
-		return 0, err
-	}
-	return uint(uid), nil
-}
-
 // Helpers
-func (s *Service) validateStatusTransition(order *Order, newStatus *OrderStatus) error {
+func (s *service) validateStatusTransition(order *Order, newStatus *OrderStatus) error {
 	if newStatus == nil {
 		return nil
 	}
@@ -179,22 +171,15 @@ func (s *Service) validateStatusTransition(order *Order, newStatus *OrderStatus)
 	return nil
 }
 
-func (s *Service) updateOrderStatus(ctx context.Context, order *Order, newStatus OrderStatus) (*Order, error) {
+func (s *service) updateOrderStatus(ctx context.Context, order *Order, newStatus OrderStatus) (*Order, error) {
 	if newStatus == StatusCancelled && order.Status != StatusCancelled {
-		product, err := s.productRepo.FindByID(ctx, order.ProductID)
-		if err != nil {
+		// Restore stock when cancelling order
+		if err := s.productService.UpdateStock(ctx, order.ProductID, order.Quantity); err != nil {
 			return nil, err
 		}
-		product.Stock += order.Quantity
-		if err := s.repo.Update(ctx, order, &product, func(o *Order) {
-			o.Status = newStatus
-		}); err != nil {
-			return nil, err
-		}
-		return order, nil
 	}
 
-	if err := s.repo.Update(ctx, order, nil, func(o *Order) {
+	if err := s.repo.Update(ctx, order, func(o *Order) {
 		o.Status = newStatus
 	}); err != nil {
 		return nil, err
@@ -202,8 +187,8 @@ func (s *Service) updateOrderStatus(ctx context.Context, order *Order, newStatus
 	return order, nil
 }
 
-func (s *Service) updateOrderQuantity(ctx context.Context, order *Order, newQuantity int) (*Order, error) {
-	product, err := s.productRepo.FindByID(ctx, order.ProductID)
+func (s *service) updateOrderQuantity(ctx context.Context, order *Order, newQuantity int) (*Order, error) {
+	product, err := s.productService.GetProductByID(ctx, order.ProductID)
 	if err != nil {
 		return nil, err
 	}
@@ -213,8 +198,12 @@ func (s *Service) updateOrderQuantity(ctx context.Context, order *Order, newQuan
 		return nil, errors.New(ErrInsufficientStockForUpdate)
 	}
 
-	product.Stock -= diff
-	if err := s.repo.Update(ctx, order, &product, func(o *Order) {
+	// Update stock based on quantity difference
+	if err := s.productService.UpdateStock(ctx, order.ProductID, -diff); err != nil {
+		return nil, err
+	}
+
+	if err := s.repo.Update(ctx, order, func(o *Order) {
 		o.Quantity = newQuantity
 		o.TotalPrice = newQuantity * product.Price
 	}); err != nil {
@@ -223,4 +212,3 @@ func (s *Service) updateOrderQuantity(ctx context.Context, order *Order, newQuan
 
 	return order, nil
 }
-
