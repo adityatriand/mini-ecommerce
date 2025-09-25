@@ -24,7 +24,7 @@ func RegisterRoutes(r *gin.Engine, db *gorm.DB, rdb *redis.Client) {
 	productHandler.RegisterRoutes(api, rdb)
 
 	orderRepo := order.NewRepository(db)
-	orderService := order.NewService(orderRepo, productRepo)
+	orderService := order.NewService(orderRepo, productService)
 	orderHandler := order.NewHandler(orderService)
 	orderHandler.RegisterRoutes(api, rdb)
 
