@@ -20,10 +20,10 @@ const (
 )
 
 type Handler struct {
-	service *Service
+	service Service
 }
 
-func NewHandler(service *Service) *Handler {
+func NewHandler(service Service) *Handler {
 	return &Handler{service: service}
 }
 
@@ -62,7 +62,7 @@ func (h *Handler) GetAllProducts(c *gin.Context) {
 }
 
 func (h *Handler) GetProductByID(c *gin.Context) {
-	id, err := h.service.ParseIDFromString(c.Param("id"))
+	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, ErrMsgInvalidProductID, response.ErrCodeValidationError, err.Error())
 		return
@@ -78,7 +78,7 @@ func (h *Handler) GetProductByID(c *gin.Context) {
 }
 
 func (h *Handler) UpdateProduct(c *gin.Context) {
-	id, err := h.service.ParseIDFromString(c.Param("id"))
+	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, ErrMsgInvalidProductID, response.ErrCodeValidationError, err.Error())
 		return
@@ -100,7 +100,7 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 }
 
 func (h *Handler) DeleteProduct(c *gin.Context) {
-	id, err := h.service.ParseIDFromString(c.Param("id"))
+	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, ErrMsgInvalidProductID, response.ErrCodeValidationError, err.Error())
 		return
