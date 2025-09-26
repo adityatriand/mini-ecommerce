@@ -4,12 +4,14 @@ import (
 	"log"
 	"mini-e-commerce/internal/config"
 	"mini-e-commerce/internal/database"
+	"mini-e-commerce/internal/swagger"
 	"mini-e-commerce/routes"
 
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
+	swagger.SetupSwaggerInfo()
 
 	cfg := config.Load()
 	db := database.Connect(cfg.DatabaseUrl)
