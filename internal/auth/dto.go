@@ -13,3 +13,8 @@ type LoginRequest struct {
 type UpdateUserRequest struct {
 	Email *string `json:"email" validate:"omitempty,email"`
 }
+
+type AuthResponse struct {
+	UserID uint   `json:"user_id"`
+	Email  string `json:"email"`
+}

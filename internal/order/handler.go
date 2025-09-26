@@ -2,8 +2,8 @@ package order
 
 import (
 	"errors"
-	"net/http"
 
+	"mini-e-commerce/internal/constants"
 	"mini-e-commerce/internal/middleware"
 	"mini-e-commerce/internal/response"
 
@@ -13,14 +13,13 @@ import (
 )
 
 const (
+	// Domain-specific error messages (keep local)
 	ErrMsgInvalidOrderID     = "Invalid order ID"
 	ErrMsgOrderNotFound      = "Order not found"
 	ErrMsgProductNotFound    = "Product not found"
 	ErrMsgInsufficientStock  = "Stock product not available"
 	ErrMsgNotAuthorized      = "Not allowed to update this order"
 	ErrMsgInvalidStatus      = "Invalid status value"
-	ErrMsgUnauthorized       = "Unauthorized"
-	ErrMsgInvalidInput       = "Invalid input request"
 	ErrMsgInvalidUserContext = "Invalid user id in context"
 	ErrMsgFailedToProcess    = "Failed to process order"
 	ErrMsgFailedToFetch      = "Failed to fetch order"
@@ -46,19 +45,31 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup, rdb *redis.Client) {
 	group.PATCH("/:id", h.UpdateOrder)
 }
 
+// CreateOrder godoc
+// @Summary Create new order
+// @Description Create new order with one product and quantity
+// @Tags Orders
+// @Accept  json
+// @Produce  json
+// @Param   request body CreateOrderRequest true "Order body request"
+// @Success 201 {object} response.SuccessResponse{data=Order}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /orders [post]
 func (h *Handler) CreateOrder(c *gin.Context) {
 	var input CreateOrderRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, http.StatusBadRequest, ErrMsgInvalidInput, response.ErrCodeValidationError, err.Error())
+		response.BadRequest(c, constants.InvalidInputMessage, err.Error())
 		return
 	}
 
 	userID, err := h.getUserIDFromContext(c)
 	if err != nil {
 		if err.Error() == "missing user_id in context" {
-			response.Error(c, http.StatusUnauthorized, ErrMsgUnauthorized, response.ErrCodeUnauthorized, err.Error())
+			response.Error(c, constants.StatusUnauthorized, constants.UnauthorizedMessage, constants.ErrorCodeValidation, err.Error())
 		} else {
-			response.Error(c, http.StatusInternalServerError, ErrMsgInvalidUserContext, response.ErrCodeInternalServer, err.Error())
+			response.InternalServerError(c, ErrMsgInvalidUserContext, err.Error())
 		}
 		return
 	}
@@ -66,87 +77,137 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 	order, err := h.service.CreateOrder(c.Request.Context(), input, userID)
 	if err != nil {
 		if err.Error() == ErrProductNotFound {
-			response.Error(c, http.StatusNotFound, ErrMsgProductNotFound, response.ErrCodeDataNotFound, err.Error())
+			response.NotFound(c, ErrMsgProductNotFound, err.Error())
 			return
 		}
 		if err.Error() == ErrInsufficientStock {
-			response.Error(c, http.StatusBadRequest, ErrMsgInsufficientStock, response.ErrCodeValidationError, err.Error())
+			response.BadRequest(c, ErrMsgInsufficientStock, err.Error())
 			return
 		}
-		response.Error(c, http.StatusInternalServerError, ErrMsgFailedToProcess, response.ErrCodeInternalServer, err.Error())
+		response.InternalServerError(c, ErrMsgFailedToProcess, err.Error())
 		return
 	}
 
-	response.Success(c, "Order created successfully", order)
+	response.SuccessCreated(c, constants.OrderCreatedMessage, order)
 }
 
+// GetOrders godoc
+// @Summary Get all list order
+// @Description Get all list order
+// @Tags Orders
+// @Accept  json
+// @Produce  json
+// @Success 200 {object} response.SuccessResponse{data=[]Order}
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /orders [get]
 func (h *Handler) GetOrders(c *gin.Context) {
 	orders, err := h.service.GetAllOrders(c.Request.Context())
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, ErrMsgFailedToFetch, response.ErrCodeInternalServer, err.Error())
+		response.InternalServerError(c, ErrMsgFailedToFetch, err.Error())
 		return
 	}
-	response.Success(c, "Orders fetched successfully", orders)
+	response.SuccessOK(c, constants.OrdersRetrievedMessage, orders)
 }
 
+// GetOrderByID godoc
+// @Summary Get single order
+// @Description Get an order by id
+// @Tags Orders
+// @Accept  json
+// @Produce  json
+// @Param   id path string true "Order ID"
+// @Success 200 {object} response.SuccessResponse{data=Order}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /orders/{id} [get]
 func (h *Handler) GetOrderByID(c *gin.Context) {
 	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, ErrMsgInvalidOrderID, response.ErrCodeValidationError, err.Error())
+		response.BadRequest(c, ErrMsgInvalidOrderID, err.Error())
 		return
 	}
 
 	order, err := h.service.GetOrderByID(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.Error(c, http.StatusNotFound, ErrMsgOrderNotFound, response.ErrCodeDataNotFound, "No order with given ID")
+			response.NotFound(c, ErrMsgOrderNotFound, "No order with given ID")
 			return
 		}
-		response.Error(c, http.StatusInternalServerError, ErrMsgFailedToFetch, response.ErrCodeInternalServer, err.Error())
+		response.InternalServerError(c, ErrMsgFailedToFetch, err.Error())
 		return
 	}
-	response.Success(c, "Order fetched successfully", order)
+	response.SuccessOK(c, constants.OrderRetrievedMessage, order)
 }
 
+// DeleteOrder godoc
+// @Summary Delete single product
+// @Description Delete an order by id
+// @Tags Orders
+// @Accept  json
+// @Produce  json
+// @Param   id path string true "Order ID"
+// @Success 200 {object} response.SuccessResponse
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /orders/{id} [delete]
 func (h *Handler) DeleteOrder(c *gin.Context) {
 	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, ErrMsgInvalidOrderID, response.ErrCodeValidationError, err.Error())
+		response.BadRequest(c, ErrMsgInvalidOrderID, err.Error())
 		return
 	}
 
 	err = h.service.DeleteOrder(c.Request.Context(), id)
 	if err != nil {
 		if err.Error() == ErrOrderNotFound {
-			response.Error(c, http.StatusNotFound, ErrMsgOrderNotFound, response.ErrCodeDataNotFound, err.Error())
+			response.NotFound(c, ErrMsgOrderNotFound, err.Error())
 			return
 		}
-		response.Error(c, http.StatusInternalServerError, ErrMsgFailedToDelete, response.ErrCodeInternalServer, err.Error())
+		response.InternalServerError(c, ErrMsgFailedToDelete, err.Error())
 		return
 	}
 
-	response.Success(c, "Order deleted successfully", nil)
+	response.SuccessOK(c, constants.OrderDeletedMessage, nil)
 }
 
+// UpdateProduct godoc
+// @Summary Update an order
+// @Description Update an order by Id
+// @Tags Orders
+// @Accept  json
+// @Produce  json
+// @Param   id path string true "Order ID"
+// @Param   request body UpdateOrderRequest true "Order body request"
+// @Success 200 {object} response.SuccessResponse{data=Order}
+// @Failure 400 {object} response.ErrorResponse
+// @Failure 401 {object} response.ErrorResponse
+// @Failure 404 {object} response.ErrorResponse
+// @Failure 500 {object} response.ErrorResponse
+// @Router /orders/{id} [patch]
 func (h *Handler) UpdateOrder(c *gin.Context) {
 	var input UpdateOrderRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, http.StatusBadRequest, ErrMsgInvalidInput, response.ErrCodeValidationError, err.Error())
+		response.BadRequest(c, constants.InvalidInputMessage, err.Error())
 		return
 	}
 
 	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, ErrMsgInvalidOrderID, response.ErrCodeValidationError, err.Error())
+		response.BadRequest(c, ErrMsgInvalidOrderID, err.Error())
 		return
 	}
 
 	userID, err := h.getUserIDFromContext(c)
 	if err != nil {
 		if err.Error() == "missing user_id in context" {
-			response.Error(c, http.StatusUnauthorized, ErrMsgUnauthorized, response.ErrCodeUnauthorized, err.Error())
+			response.Error(c, constants.StatusUnauthorized, constants.UnauthorizedMessage, constants.ErrorCodeValidation, err.Error())
 		} else {
-			response.Error(c, http.StatusInternalServerError, ErrMsgInvalidUserContext, response.ErrCodeInternalServer, err.Error())
+			response.InternalServerError(c, ErrMsgInvalidUserContext, err.Error())
 		}
 		return
 	}
@@ -154,26 +215,26 @@ func (h *Handler) UpdateOrder(c *gin.Context) {
 	order, err := h.service.UpdateOrder(c.Request.Context(), id, input, userID)
 	if err != nil {
 		if err.Error() == ErrOrderNotFound {
-			response.Error(c, http.StatusNotFound, ErrMsgOrderNotFound, response.ErrCodeDataNotFound, err.Error())
+			response.NotFound(c, ErrMsgOrderNotFound, err.Error())
 			return
 		}
 		if err.Error() == ErrNotAuthorizedToUpdate {
-			response.Error(c, http.StatusForbidden, ErrMsgNotAuthorized, response.ErrCodeForbidden, err.Error())
+			response.Error(c, constants.StatusUnauthorized, ErrMsgNotAuthorized, constants.ErrorCodeValidation, err.Error())
 			return
 		}
 		if err.Error() == ErrInvalidStatusValue {
-			response.Error(c, http.StatusBadRequest, ErrMsgInvalidStatus, response.ErrCodeValidationError, err.Error())
+			response.BadRequest(c, ErrMsgInvalidStatus, err.Error())
 			return
 		}
 		if err.Error() == ErrInsufficientStockForUpdate {
-			response.Error(c, http.StatusBadRequest, ErrMsgInsufficientStock, response.ErrCodeValidationError, err.Error())
+			response.BadRequest(c, ErrMsgInsufficientStock, err.Error())
 			return
 		}
-		response.Error(c, http.StatusInternalServerError, ErrMsgFailedToUpdate, response.ErrCodeInternalServer, err.Error())
+		response.InternalServerError(c, ErrMsgFailedToUpdate, err.Error())
 		return
 	}
 
-	response.Success(c, "Order updated successfully", order)
+	response.SuccessOK(c, constants.OrderUpdatedMessage, order)
 }
 
 // Helpers

@@ -1,0 +1,626 @@
+definitions:
+  internal_auth.AuthResponse:
+    properties:
+      email:
+        type: string
+      user_id:
+        type: integer
+    type: object
+  internal_auth.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  internal_auth.RegisterRequest:
+    properties:
+      email:
+        type: string
+      password:
+        minLength: 8
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  internal_order.CreateOrderRequest:
+    properties:
+      product_id:
+        type: integer
+      quantity:
+        type: integer
+    required:
+    - product_id
+    - quantity
+    type: object
+  internal_order.Order:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      product_id:
+        type: integer
+      quantity:
+        type: integer
+      status:
+        $ref: '#/definitions/internal_order.OrderStatus'
+      total_price:
+        type: integer
+      updated_at:
+        type: string
+      user_id:
+        type: integer
+    type: object
+  internal_order.OrderStatus:
+    enum:
+    - PENDING
+    - PAID
+    - CANCELLED
+    type: string
+    x-enum-varnames:
+    - StatusPending
+    - StatusPaid
+    - StatusCancelled
+  internal_order.UpdateOrderRequest:
+    properties:
+      quantity:
+        type: integer
+      status:
+        allOf:
+        - $ref: '#/definitions/internal_order.OrderStatus'
+        enum:
+        - pending
+        - paid
+        - cancelled
+    type: object
+  internal_product.CreateProductRequest:
+    properties:
+      name:
+        type: string
+      price:
+        type: integer
+      stock:
+        minimum: 0
+        type: integer
+    required:
+    - name
+    - price
+    - stock
+    type: object
+  internal_product.Product:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      price:
+        type: integer
+      stock:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  internal_product.UpdateProductRequest:
+    properties:
+      name:
+        type: string
+      price:
+        type: integer
+      stock:
+        minimum: 0
+        type: integer
+    type: object
+  mini-e-commerce_internal_response.ErrorInfo:
+    properties:
+      code:
+        type: string
+      details:
+        type: string
+    type: object
+  mini-e-commerce_internal_response.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/mini-e-commerce_internal_response.ErrorInfo'
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  mini-e-commerce_internal_response.SuccessResponse:
+    properties:
+      data: {}
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+info:
+  contact: {}
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authentication login user
+      parameters:
+      - description: Login request body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_auth.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+      summary: Auth for login user
+      tags:
+      - Auth
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Logout the current authenticated user by invalidating their session
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+      summary: Logout user
+      tags:
+      - Auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user with username and password
+      parameters:
+      - description: User request body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_auth.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+      summary: Create new user
+      tags:
+      - Auth
+  /orders:
+    get:
+      consumes:
+      - application/json
+      description: Get all list order
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/internal_order.Order'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+      summary: Get all list order
+      tags:
+      - Orders
+    post:
+      consumes:
+      - application/json
+      description: Create new order with one product and quantity
+      parameters:
+      - description: Order body request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_order.CreateOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_order.Order'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+      summary: Create new order
+      tags:
+      - Orders
+  /orders/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete an order by id
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+      summary: Delete single product
+      tags:
+      - Orders
+    get:
+      consumes:
+      - application/json
+      description: Get an order by id
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_order.Order'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+      summary: Get single order
+      tags:
+      - Orders
+    patch:
+      consumes:
+      - application/json
+      description: Update an order by Id
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Order body request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_order.UpdateOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_order.Order'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+      summary: Update an order
+      tags:
+      - Orders
+  /products:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all products
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/internal_product.Product'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+      summary: Get all products
+      tags:
+      - Products
+    post:
+      consumes:
+      - application/json
+      description: Create a new product with name, price, and stock
+      parameters:
+      - description: Product request body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_product.CreateProductRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_product.Product'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+      summary: Create a new product
+      tags:
+      - Products
+  /products/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete exist single product
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+      summary: Delete exist product
+      tags:
+      - Products
+    get:
+      consumes:
+      - application/json
+      description: Get product by id
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_product.Product'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+      summary: Get single product
+      tags:
+      - Products
+    patch:
+      consumes:
+      - application/json
+      description: Update single product
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Product request body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_product.UpdateProductRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_product.Product'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+      summary: Update exist product
+      tags:
+      - Products
+swagger: "2.0"

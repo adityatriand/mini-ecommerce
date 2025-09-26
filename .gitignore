@@ -12,6 +12,8 @@
 /build/
 /dist/
 /target/
+/tmp/
+main
 
 # Cache dan modul
 /vendor/
@@ -25,6 +27,7 @@
 .idea/
 *.swp
 *.swo
+.air.toml
 
 # Sistem
 .DS_Store
