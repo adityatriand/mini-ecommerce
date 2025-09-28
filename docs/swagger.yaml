@@ -1,12 +1,12 @@
 definitions:
-  internal_auth.AuthResponse:
+  auth.AuthResponse:
     properties:
       email:
         type: string
       user_id:
         type: integer
     type: object
-  internal_auth.LoginRequest:
+  auth.LoginRequest:
     properties:
       email:
         type: string
@@ -16,7 +16,7 @@ definitions:
     - email
     - password
     type: object
-  internal_auth.RegisterRequest:
+  auth.RegisterRequest:
     properties:
       email:
         type: string
@@ -27,7 +27,18 @@ definitions:
     - email
     - password
     type: object
-  internal_order.CreateOrderRequest:
+  dto.PaginationMetadata:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  order.CreateOrderRequest:
     properties:
       product_id:
         type: integer
@@ -37,7 +48,7 @@ definitions:
     - product_id
     - quantity
     type: object
-  internal_order.Order:
+  order.Order:
     properties:
       created_at:
         type: string
@@ -48,7 +59,7 @@ definitions:
       quantity:
         type: integer
       status:
-        $ref: '#/definitions/internal_order.OrderStatus'
+        $ref: '#/definitions/order.OrderStatus'
       total_price:
         type: integer
       updated_at:
@@ -56,7 +67,16 @@ definitions:
       user_id:
         type: integer
     type: object
-  internal_order.OrderStatus:
+  order.OrderListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/order.Order'
+        type: array
+      pagination:
+        $ref: '#/definitions/dto.PaginationMetadata'
+    type: object
+  order.OrderStatus:
     enum:
     - PENDING
     - PAID
@@ -66,19 +86,19 @@ definitions:
     - StatusPending
     - StatusPaid
     - StatusCancelled
-  internal_order.UpdateOrderRequest:
+  order.UpdateOrderRequest:
     properties:
       quantity:
         type: integer
       status:
         allOf:
-        - $ref: '#/definitions/internal_order.OrderStatus'
+        - $ref: '#/definitions/order.OrderStatus'
         enum:
         - pending
         - paid
         - cancelled
     type: object
-  internal_product.CreateProductRequest:
+  product.CreateProductRequest:
     properties:
       name:
         type: string
@@ -92,7 +112,7 @@ definitions:
     - price
     - stock
     type: object
-  internal_product.Product:
+  product.Product:
     properties:
       created_at:
         type: string
@@ -107,7 +127,16 @@ definitions:
       updated_at:
         type: string
     type: object
-  internal_product.UpdateProductRequest:
+  product.ProductListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/product.Product'
+        type: array
+      pagination:
+        $ref: '#/definitions/dto.PaginationMetadata'
+    type: object
+  product.UpdateProductRequest:
     properties:
       name:
         type: string
@@ -117,23 +146,23 @@ definitions:
         minimum: 0
         type: integer
     type: object
-  mini-e-commerce_internal_response.ErrorInfo:
+  response.ErrorInfo:
     properties:
       code:
         type: string
       details:
         type: string
     type: object
-  mini-e-commerce_internal_response.ErrorResponse:
+  response.ErrorResponse:
     properties:
       error:
-        $ref: '#/definitions/mini-e-commerce_internal_response.ErrorInfo'
+        $ref: '#/definitions/response.ErrorInfo'
       message:
         type: string
       success:
         type: boolean
     type: object
-  mini-e-commerce_internal_response.SuccessResponse:
+  response.SuccessResponse:
     properties:
       data: {}
       message:
@@ -155,7 +184,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_auth.LoginRequest'
+          $ref: '#/definitions/auth.LoginRequest'
       produces:
       - application/json
       responses:
@@ -163,19 +192,19 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - $ref: '#/definitions/response.SuccessResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_auth.AuthResponse'
+                  $ref: '#/definitions/auth.AuthResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Auth for login user
       tags:
       - Auth
@@ -190,15 +219,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            $ref: '#/definitions/response.SuccessResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Logout user
       tags:
       - Auth
@@ -213,7 +242,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_auth.RegisterRequest'
+          $ref: '#/definitions/auth.RegisterRequest'
       produces:
       - application/json
       responses:
@@ -221,19 +250,19 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - $ref: '#/definitions/response.SuccessResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_auth.AuthResponse'
+                  $ref: '#/definitions/auth.AuthResponse'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Create new user
       tags:
       - Auth
@@ -242,6 +271,37 @@ paths:
       consumes:
       - application/json
       description: Get all list order
+      parameters:
+      - description: Page number
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: page_size
+        type: integer
+      - description: Sort order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        type: string
+      - description: Sort by field
+        enum:
+        - id
+        - user_id
+        - product_id
+        - quantity
+        - total_price
+        - status
+        - created_at
+        in: query
+        name: sort_by
+        type: string
       produces:
       - application/json
       responses:
@@ -249,21 +309,23 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - $ref: '#/definitions/response.SuccessResponse'
             - properties:
                 data:
-                  items:
-                    $ref: '#/definitions/internal_order.Order'
-                  type: array
+                  $ref: '#/definitions/order.OrderListResponse'
               type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Get all list order
       tags:
       - Orders
@@ -277,7 +339,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_order.CreateOrderRequest'
+          $ref: '#/definitions/order.CreateOrderRequest'
       produces:
       - application/json
       responses:
@@ -285,23 +347,23 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - $ref: '#/definitions/response.SuccessResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_order.Order'
+                  $ref: '#/definitions/order.Order'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Create new order
       tags:
       - Orders
@@ -322,23 +384,23 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            $ref: '#/definitions/response.SuccessResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Delete single product
       tags:
       - Orders
@@ -359,27 +421,27 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - $ref: '#/definitions/response.SuccessResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_order.Order'
+                  $ref: '#/definitions/order.Order'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Get single order
       tags:
       - Orders
@@ -398,7 +460,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_order.UpdateOrderRequest'
+          $ref: '#/definitions/order.UpdateOrderRequest'
       produces:
       - application/json
       responses:
@@ -406,27 +468,27 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - $ref: '#/definitions/response.SuccessResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_order.Order'
+                  $ref: '#/definitions/order.Order'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Update an order
       tags:
       - Orders
@@ -434,7 +496,36 @@ paths:
     get:
       consumes:
       - application/json
-      description: Get a list of all products
+      description: Get a list of all products with pagination and filtering
+      parameters:
+      - description: Page number
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - description: Page size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: page_size
+        type: integer
+      - description: Sort order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: order
+        type: string
+      - description: Sort by field
+        enum:
+        - id
+        - name
+        - price
+        - stock
+        - created_at
+        in: query
+        name: sort_by
+        type: string
       produces:
       - application/json
       responses:
@@ -442,21 +533,23 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - $ref: '#/definitions/response.SuccessResponse'
             - properties:
                 data:
-                  items:
-                    $ref: '#/definitions/internal_product.Product'
-                  type: array
+                  $ref: '#/definitions/product.ProductListResponse'
               type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Get all products
       tags:
       - Products
@@ -470,7 +563,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_product.CreateProductRequest'
+          $ref: '#/definitions/product.CreateProductRequest'
       produces:
       - application/json
       responses:
@@ -478,23 +571,23 @@ paths:
           description: Created
           schema:
             allOf:
-            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - $ref: '#/definitions/response.SuccessResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_product.Product'
+                  $ref: '#/definitions/product.Product'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Create a new product
       tags:
       - Products
@@ -515,23 +608,23 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            $ref: '#/definitions/response.SuccessResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Delete exist product
       tags:
       - Products
@@ -552,27 +645,27 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - $ref: '#/definitions/response.SuccessResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_product.Product'
+                  $ref: '#/definitions/product.Product'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Get single product
       tags:
       - Products
@@ -591,7 +684,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_product.UpdateProductRequest'
+          $ref: '#/definitions/product.UpdateProductRequest'
       produces:
       - application/json
       responses:
@@ -599,27 +692,27 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/mini-e-commerce_internal_response.SuccessResponse'
+            - $ref: '#/definitions/response.SuccessResponse'
             - properties:
                 data:
-                  $ref: '#/definitions/internal_product.Product'
+                  $ref: '#/definitions/product.Product'
               type: object
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/mini-e-commerce_internal_response.ErrorResponse'
+            $ref: '#/definitions/response.ErrorResponse'
       summary: Update exist product
       tags:
       - Products

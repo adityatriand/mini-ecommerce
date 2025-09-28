@@ -48,7 +48,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 // @Accept  json
 // @Produce  json
 // @Param   request body RegisterRequest true "User request body"
-// @Success 201 {object} h.responseHelper.SuccessResponse{data=AuthResponse}
+// @Success 201 {object} response.SuccessResponse{data=AuthResponse}
 // @Failure 400 {object} response.ErrorResponse
 // @Failure 500 {object} response.ErrorResponse
 // @Router /auth/register [post]
@@ -92,7 +92,7 @@ func (h *Handler) Register(c *gin.Context) {
 // @Accept  json
 // @Produce  json
 // @Param   request body LoginRequest true "Login request body"
-// @Success 201 {object} h.responseHelper.SuccessResponse{data=AuthResponse}
+// @Success 201 {object} response.SuccessResponse{data=AuthResponse}
 // @Failure 400 {object} response.ErrorResponse
 // @Failure 500 {object} response.ErrorResponse
 // @Router /auth/login [post]
@@ -134,7 +134,7 @@ func (h *Handler) Login(c *gin.Context) {
 // @Tags Auth
 // @Accept  json
 // @Produce  json
-// @Success 200 {object} h.responseHelper.SuccessResponse
+// @Success 200 {object} response.SuccessResponse
 // @Failure 400 {object} response.ErrorResponse
 // @Failure 500 {object} response.ErrorResponse
 // @Router /auth/logout [post]

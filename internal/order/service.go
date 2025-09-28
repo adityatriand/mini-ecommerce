@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"mini-e-commerce/internal/dto"
 	"mini-e-commerce/internal/product"
 
 	"github.com/go-playground/validator/v10"
@@ -25,6 +26,7 @@ const (
 type Service interface {
 	CreateOrder(ctx context.Context, input CreateOrderRequest, userID uint) (*Order, error)
 	GetAllOrders(ctx context.Context) ([]Order, error)
+	GetAllOrdersWithQuery(ctx context.Context, query OrderQuery) (*OrderListResponse, error)
 	GetOrderByID(ctx context.Context, id uint) (*Order, error)
 	UpdateOrder(ctx context.Context, id uint, input UpdateOrderRequest, userID uint) (*Order, error)
 	DeleteOrder(ctx context.Context, id uint) error
@@ -211,4 +213,54 @@ func (s *service) updateOrderQuantity(ctx context.Context, order *Order, newQuan
 	}
 
 	return order, nil
+}
+
+func (s *service) GetAllOrdersWithQuery(ctx context.Context, query OrderQuery) (*OrderListResponse, error) {
+	page := query.Page
+	if page <= 0 {
+		page = 1
+	}
+
+	pageSize := query.PageSize
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	order := query.Order
+	if order != "asc" && order != "desc" {
+		order = "desc"
+	}
+
+	sortBy := query.SortBy
+	validSortFields := map[string]bool{
+		"id": true, "user_id": true, "product_id": true, "quantity": true, "total_price": true, "status": true, "created_at": true,
+	}
+	if sortBy != "" && !validSortFields[sortBy] {
+		sortBy = "created_at"
+	}
+
+	offset := (page - 1) * pageSize
+
+	orders, total, err := s.repo.FindAllWithPagination(ctx, offset, pageSize, sortBy, order)
+	if err != nil {
+		return nil, err
+	}
+
+	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+
+	response := &OrderListResponse{
+		Data: orders,
+		Pagination: dto.PaginationMetadata{
+			Page:       page,
+			PageSize:   pageSize,
+			Total:      total,
+			TotalPages: totalPages,
+		},
+	}
+
+	return response, nil
 }

@@ -96,3 +96,23 @@ func (r *ResponseHelper) NotFound(c *gin.Context, message string, details string
 func (r *ResponseHelper) InternalServerError(c *gin.Context, message string, details string) {
 	r.Error(c, http.StatusInternalServerError, message, ErrCodeInternalServer, details)
 }
+
+func (r *ResponseHelper) SuccessPaginated(c *gin.Context, message string, data any, pagination any) {
+	response := gin.H{
+		"success":    true,
+		"message":    message,
+		"data":       data,
+		"pagination": pagination,
+	}
+
+	ctxLogger := r.logger.WithContext(c)
+	ctxLogger.Info("API Success Response",
+		zap.Int("status_code", http.StatusOK),
+		zap.String("message", message),
+		zap.String("method", c.Request.Method),
+		zap.String("path", c.Request.URL.Path),
+		zap.String("user_agent", c.Request.UserAgent()),
+	)
+
+	c.JSON(http.StatusOK, response)
+}

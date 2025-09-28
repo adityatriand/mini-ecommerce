@@ -79,21 +79,32 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 
 // GetAllProducts godoc
 // @Summary Get all products
-// @Description Get a list of all products
+// @Description Get a list of all products with pagination and filtering
 // @Tags Products
 // @Accept  json
 // @Produce  json
-// @Success 200 {object} response.SuccessResponse{data=[]Product}
+// @Param page query int false "Page number" minimum(1)
+// @Param page_size query int false "Page size" minimum(1) maximum(100)
+// @Param order query string false "Sort order" Enums(asc, desc)
+// @Param sort_by query string false "Sort by field" Enums(id, name, price, stock, created_at)
+// @Success 200 {object} response.SuccessResponse{data=ProductListResponse}
+// @Failure 400 {object} response.ErrorResponse
 // @Failure 401 {object} response.ErrorResponse
 // @Failure 500 {object} response.ErrorResponse
 // @Router /products [get]
 func (h *Handler) GetAllProducts(c *gin.Context) {
-	products, err := h.service.GetAllProducts(c.Request.Context())
+	var query ProductQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		h.responseHelper.BadRequest(c, response.ErrCodeValidationError, err.Error())
+		return
+	}
+
+	result, err := h.service.GetAllProductsWithQuery(c.Request.Context(), query)
 	if err != nil {
 		h.responseHelper.InternalServerError(c, ErrMsgFailedToFetch, err.Error())
 		return
 	}
-	h.responseHelper.SuccessOK(c, "List product retrieved successfully", products)
+	h.responseHelper.SuccessPaginated(c, "List product retrieved successfully", result.Data, result.Pagination)
 
 }
 
