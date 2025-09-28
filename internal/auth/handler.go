@@ -4,9 +4,11 @@ import (
 	"errors"
 
 	"mini-e-commerce/internal/constants"
+	"mini-e-commerce/internal/logger"
 	"mini-e-commerce/internal/response"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 const (
@@ -67,6 +69,12 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
+	logger.Info("User registered successfully",
+		zap.Uint("user_id", user.ID),
+		zap.String("email", user.Email),
+		zap.String("request_id", c.GetString("request_id")),
+	)
+
 	response.SuccessCreated(c, constants.UserRegisteredMessage, gin.H{
 		"user_id": user.ID,
 		"email":   user.Email,
@@ -105,6 +113,12 @@ func (h *Handler) Login(c *gin.Context) {
 	// Set cookie with secure settings
 	c.SetCookie("session_id", sessionID, int(SessionTimeout.Seconds()), "/", "", false, true)
 
+	logger.Info("User logged in successfully",
+		zap.Uint("user_id", user.ID),
+		zap.String("email", user.Email),
+		zap.String("request_id", c.GetString("request_id")),
+	)
+
 	response.SuccessOK(c, constants.LoginSuccessfulMessage, gin.H{
 		"user_id": user.ID,
 		"email":   user.Email,
@@ -135,6 +149,11 @@ func (h *Handler) Logout(c *gin.Context) {
 
 	// Clear cookie
 	c.SetCookie("session_id", "", -1, "/", "", false, true)
+
+	logger.Info("User logged out successfully",
+		zap.String("session_id", sessionID),
+		zap.String("request_id", c.GetString("request_id")),
+	)
 
 	response.SuccessOK(c, constants.LogoutSuccessfulMessage, nil)
 }
