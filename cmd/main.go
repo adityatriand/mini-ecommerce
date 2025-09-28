@@ -16,7 +16,9 @@ import (
 )
 
 func main() {
-	if err := logger.Init(); err != nil {
+	configLog := logger.NewConfig()
+	logger, err := logger.NewLogger(configLog)
+	if err != nil {
 		panic("Failed to initialize logger: " + err.Error())
 	}
 	defer logger.Sync()
@@ -27,21 +29,21 @@ func main() {
 	swagger.SetupSwaggerInfo()
 
 	cfg := config.Load()
-	db := database.Connect(cfg.DatabaseUrl)
-	if err := database.Migrate(db); err != nil {
+	db := database.Connect(cfg.DatabaseUrl, logger)
+	if err := database.Migrate(db, logger); err != nil {
 		logger.Fatal("Failed to migrate database: ", zap.Error(err))
 	}
-	rdb := database.ConnectRedis(cfg.RedisAddr, cfg.RedisPassword)
+	rdb := database.ConnectRedis(cfg.RedisAddr, cfg.RedisPassword, logger)
 
 	r := gin.Default()
-	r.Use(middleware.RequestLogger())
-	r.Use(middleware.ErrorLogger())
+	r.Use(middleware.RequestLogger(logger))
+	r.Use(middleware.ErrorLogger(logger))
 
 	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 		logger.Fatal("Failed to set trusted proxies: ", zap.Error(err))
 	}
 
-	routes.RegisterRoutes(r, db, rdb)
+	routes.RegisterRoutes(r, db, rdb, logger)
 
 	port := cfg.Port
 	if port == "" {

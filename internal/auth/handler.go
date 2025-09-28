@@ -2,8 +2,8 @@ package auth
 
 import (
 	"errors"
+	"net/http"
 
-	"mini-e-commerce/internal/constants"
 	"mini-e-commerce/internal/logger"
 	"mini-e-commerce/internal/response"
 
@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	// Domain-specific error messages (keep local)
 	ErrMsgFailedToRegister   = "Failed to register user"
 	ErrMsgFailedToLogin      = "Failed to login user"
 	ErrMsgInvalidCredentials = "Invalid credentials"
@@ -20,11 +19,17 @@ const (
 )
 
 type Handler struct {
-	service Service
+	service        Service
+	logger         logger.Logger
+	responseHelper *response.ResponseHelper
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service Service, log logger.Logger) *Handler {
+	return &Handler{
+		service:        service,
+		logger:         log,
+		responseHelper: response.NewResponseHelper(log),
+	}
 }
 
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
@@ -43,7 +48,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 // @Accept  json
 // @Produce  json
 // @Param   request body RegisterRequest true "User request body"
-// @Success 201 {object} response.SuccessResponse{data=AuthResponse}
+// @Success 201 {object} h.responseHelper.SuccessResponse{data=AuthResponse}
 // @Failure 400 {object} response.ErrorResponse
 // @Failure 500 {object} response.ErrorResponse
 // @Router /auth/register [post]
@@ -51,31 +56,30 @@ func (h *Handler) Register(c *gin.Context) {
 	var input RegisterRequest
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.BadRequest(c, constants.InvalidInputMessage, err.Error())
+		h.responseHelper.BadRequest(c, response.ErrCodeValidationError, err.Error())
 		return
 	}
 
 	user, err := h.service.RegisterUser(c.Request.Context(), input)
 	if err != nil {
 		if err.Error() == ErrEmailAlreadyExists {
-			response.Error(c, constants.StatusBadRequest, "Email already exists", constants.ErrorCodeValidation, err.Error())
+			h.responseHelper.BadRequest(c, "Email already exists", err.Error())
 			return
 		}
 		if err.Error() == ErrWeakPassword {
-			response.BadRequest(c, "Password too weak", err.Error())
+			h.responseHelper.BadRequest(c, "Password too weak", err.Error())
 			return
 		}
-		response.InternalServerError(c, ErrMsgFailedToRegister, err.Error())
+		h.responseHelper.InternalServerError(c, ErrMsgFailedToRegister, err.Error())
 		return
 	}
 
-	logger.Info("User registered successfully",
+	h.logger.Info("User registered",
 		zap.Uint("user_id", user.ID),
 		zap.String("email", user.Email),
-		zap.String("request_id", c.GetString("request_id")),
 	)
 
-	response.SuccessCreated(c, constants.UserRegisteredMessage, gin.H{
+	h.responseHelper.SuccessCreated(c, "User created successfully", gin.H{
 		"user_id": user.ID,
 		"email":   user.Email,
 	})
@@ -88,7 +92,7 @@ func (h *Handler) Register(c *gin.Context) {
 // @Accept  json
 // @Produce  json
 // @Param   request body LoginRequest true "Login request body"
-// @Success 201 {object} response.SuccessResponse{data=AuthResponse}
+// @Success 201 {object} h.responseHelper.SuccessResponse{data=AuthResponse}
 // @Failure 400 {object} response.ErrorResponse
 // @Failure 500 {object} response.ErrorResponse
 // @Router /auth/login [post]
@@ -96,30 +100,29 @@ func (h *Handler) Login(c *gin.Context) {
 	var input LoginRequest
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.BadRequest(c, constants.InvalidInputMessage, err.Error())
+		h.responseHelper.BadRequest(c, response.ErrCodeValidationError, err.Error())
 		return
 	}
 
 	user, sessionID, err := h.service.LoginUser(c.Request.Context(), input)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
-			response.Error(c, constants.StatusUnauthorized, ErrMsgInvalidCredentials, constants.ErrorCodeValidation, err.Error())
+			h.responseHelper.Error(c, http.StatusUnauthorized, ErrMsgInvalidCredentials, response.ErrCodeInvalidCredentials, err.Error())
 			return
 		}
-		response.InternalServerError(c, ErrMsgFailedToLogin, err.Error())
+		h.responseHelper.InternalServerError(c, ErrMsgFailedToLogin, err.Error())
 		return
 	}
 
-	// Set cookie with secure settings
 	c.SetCookie("session_id", sessionID, int(SessionTimeout.Seconds()), "/", "", false, true)
 
-	logger.Info("User logged in successfully",
+	h.logger.Info("User session created",
 		zap.Uint("user_id", user.ID),
 		zap.String("email", user.Email),
-		zap.String("request_id", c.GetString("request_id")),
+		zap.String("session_id", sessionID),
 	)
 
-	response.SuccessOK(c, constants.LoginSuccessfulMessage, gin.H{
+	h.responseHelper.SuccessOK(c, "Login successfully", gin.H{
 		"user_id": user.ID,
 		"email":   user.Email,
 	})
@@ -131,29 +134,27 @@ func (h *Handler) Login(c *gin.Context) {
 // @Tags Auth
 // @Accept  json
 // @Produce  json
-// @Success 200 {object} response.SuccessResponse
+// @Success 200 {object} h.responseHelper.SuccessResponse
 // @Failure 400 {object} response.ErrorResponse
 // @Failure 500 {object} response.ErrorResponse
 // @Router /auth/logout [post]
 func (h *Handler) Logout(c *gin.Context) {
 	sessionID, err := c.Cookie("session_id")
 	if err != nil {
-		response.BadRequest(c, constants.UnauthorizedMessage, "No session found")
+		h.responseHelper.BadRequest(c, response.ErrCodeUnauthorized, "No session found")
 		return
 	}
 
 	if err := h.service.LogoutUser(c.Request.Context(), sessionID); err != nil {
-		response.InternalServerError(c, ErrMsgFailedToLogout, err.Error())
+		h.responseHelper.InternalServerError(c, ErrMsgFailedToLogout, err.Error())
 		return
 	}
 
-	// Clear cookie
 	c.SetCookie("session_id", "", -1, "/", "", false, true)
 
-	logger.Info("User logged out successfully",
+	h.logger.Info("User session terminated",
 		zap.String("session_id", sessionID),
-		zap.String("request_id", c.GetString("request_id")),
 	)
 
-	response.SuccessOK(c, constants.LogoutSuccessfulMessage, nil)
+	h.responseHelper.SuccessOK(c, "Logout successfully", nil)
 }

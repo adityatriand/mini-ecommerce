@@ -2,6 +2,7 @@ package routes
 
 import (
 	"mini-e-commerce/internal/auth"
+	"mini-e-commerce/internal/logger"
 	"mini-e-commerce/internal/order"
 	"mini-e-commerce/internal/product"
 
@@ -15,24 +16,24 @@ import (
 	"gorm.io/gorm"
 )
 
-func RegisterRoutes(r *gin.Engine, db *gorm.DB, rdb *redis.Client) {
+func RegisterRoutes(r *gin.Engine, db *gorm.DB, rdb *redis.Client, log logger.Logger) {
 	api := r.Group("/api")
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	authRepo := auth.NewRepository(db)
 	authService := auth.NewService(authRepo, rdb)
-	authHandler := auth.NewHandler(authService)
+	authHandler := auth.NewHandler(authService, log)
 	authHandler.RegisterRoutes(api)
 
 	productRepo := product.NewRepository(db)
 	productService := product.NewService(productRepo)
-	productHandler := product.NewHandler(productService)
+	productHandler := product.NewHandler(productService, log)
 	productHandler.RegisterRoutes(api, rdb)
 
 	orderRepo := order.NewRepository(db)
 	orderService := order.NewService(orderRepo, productService)
-	orderHandler := order.NewHandler(orderService)
+	orderHandler := order.NewHandler(orderService, log)
 	orderHandler.RegisterRoutes(api, rdb)
 
 }
