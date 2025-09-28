@@ -2,8 +2,8 @@ package order
 
 import (
 	"errors"
+	"net/http"
 
-	"mini-e-commerce/internal/constants"
 	"mini-e-commerce/internal/logger"
 	"mini-e-commerce/internal/middleware"
 	"mini-e-commerce/internal/response"
@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	// Domain-specific error messages (keep local)
 	ErrMsgInvalidOrderID     = "Invalid order ID"
 	ErrMsgOrderNotFound      = "Order not found"
 	ErrMsgProductNotFound    = "Product not found"
@@ -30,11 +29,17 @@ const (
 )
 
 type Handler struct {
-	service Service
+	service        Service
+	logger         logger.Logger
+	responseHelper *response.ResponseHelper
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service Service, log logger.Logger) *Handler {
+	return &Handler{
+		service:        service,
+		logger:         log,
+		responseHelper: response.NewResponseHelper(log),
+	}
 }
 
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup, rdb *redis.Client) {
@@ -62,16 +67,16 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup, rdb *redis.Client) {
 func (h *Handler) CreateOrder(c *gin.Context) {
 	var input CreateOrderRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.BadRequest(c, constants.InvalidInputMessage, err.Error())
+		h.responseHelper.BadRequest(c, response.ErrCodeValidationError, err.Error())
 		return
 	}
 
 	userID, err := h.getUserIDFromContext(c)
 	if err != nil {
 		if err.Error() == "missing user_id in context" {
-			response.Error(c, constants.StatusUnauthorized, constants.UnauthorizedMessage, constants.ErrorCodeValidation, err.Error())
+			h.responseHelper.Error(c, http.StatusUnauthorized, response.ErrCodeUnauthorized, response.ErrCodeUnauthorized, err.Error())
 		} else {
-			response.InternalServerError(c, ErrMsgInvalidUserContext, err.Error())
+			h.responseHelper.InternalServerError(c, ErrMsgInvalidUserContext, err.Error())
 		}
 		return
 	}
@@ -79,27 +84,27 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 	order, err := h.service.CreateOrder(c.Request.Context(), input, userID)
 	if err != nil {
 		if err.Error() == ErrProductNotFound {
-			response.NotFound(c, ErrMsgProductNotFound, err.Error())
+			h.responseHelper.NotFound(c, ErrMsgProductNotFound, err.Error())
 			return
 		}
 		if err.Error() == ErrInsufficientStock {
-			response.BadRequest(c, ErrMsgInsufficientStock, err.Error())
+			h.responseHelper.BadRequest(c, ErrMsgInsufficientStock, err.Error())
 			return
 		}
-		response.InternalServerError(c, ErrMsgFailedToProcess, err.Error())
+		h.responseHelper.InternalServerError(c, ErrMsgFailedToProcess, err.Error())
 		return
 	}
 
-	response.SuccessCreated(c, constants.OrderCreatedMessage, order)
-
-	logger.Info("Order created successfully",
+	ctxLogger := h.logger.WithContext(c)
+	ctxLogger.Info("Order placed",
 		zap.Uint("order_id", order.ID),
 		zap.Uint("user_id", userID),
 		zap.Uint("product_id", input.ProductID),
 		zap.Int("quantity", input.Quantity),
-		zap.Int("total_price", order.TotalPrice),
-		zap.String("request_id", c.GetString("request_id")),
+		zap.Int("total_amount", order.TotalPrice),
 	)
+
+	h.responseHelper.SuccessCreated(c, "Order created successfully", order)
 
 }
 
@@ -116,14 +121,10 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 func (h *Handler) GetOrders(c *gin.Context) {
 	orders, err := h.service.GetAllOrders(c.Request.Context())
 	if err != nil {
-		response.InternalServerError(c, ErrMsgFailedToFetch, err.Error())
+		h.responseHelper.InternalServerError(c, ErrMsgFailedToFetch, err.Error())
 		return
 	}
-	response.SuccessOK(c, constants.OrdersRetrievedMessage, orders)
-	logger.Info("Orders retrieved successfully",
-		zap.Int("count", len(orders)),
-		zap.String("request_id", c.GetString("request_id")),
-	)
+	h.responseHelper.SuccessOK(c, "List Order retrieved successfully", orders)
 }
 
 // GetOrderByID godoc
@@ -142,24 +143,20 @@ func (h *Handler) GetOrders(c *gin.Context) {
 func (h *Handler) GetOrderByID(c *gin.Context) {
 	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
-		response.BadRequest(c, ErrMsgInvalidOrderID, err.Error())
+		h.responseHelper.BadRequest(c, ErrMsgInvalidOrderID, err.Error())
 		return
 	}
 
 	order, err := h.service.GetOrderByID(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.NotFound(c, ErrMsgOrderNotFound, "No order with given ID")
+			h.responseHelper.NotFound(c, ErrMsgOrderNotFound, "No order with given ID")
 			return
 		}
-		response.InternalServerError(c, ErrMsgFailedToFetch, err.Error())
+		h.responseHelper.InternalServerError(c, ErrMsgFailedToFetch, err.Error())
 		return
 	}
-	response.SuccessOK(c, constants.OrderRetrievedMessage, order)
-	logger.Info("Order retrieved successfully",
-		zap.Uint("order_id", order.ID),
-		zap.String("request_id", c.GetString("request_id")),
-	)
+	h.responseHelper.SuccessOK(c, "Order retrieved successfully", order)
 }
 
 // DeleteOrder godoc
@@ -178,26 +175,26 @@ func (h *Handler) GetOrderByID(c *gin.Context) {
 func (h *Handler) DeleteOrder(c *gin.Context) {
 	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
-		response.BadRequest(c, ErrMsgInvalidOrderID, err.Error())
+		h.responseHelper.BadRequest(c, ErrMsgInvalidOrderID, err.Error())
 		return
 	}
 
 	err = h.service.DeleteOrder(c.Request.Context(), id)
 	if err != nil {
 		if err.Error() == ErrOrderNotFound {
-			response.NotFound(c, ErrMsgOrderNotFound, err.Error())
+			h.responseHelper.NotFound(c, ErrMsgOrderNotFound, err.Error())
 			return
 		}
-		response.InternalServerError(c, ErrMsgFailedToDelete, err.Error())
+		h.responseHelper.InternalServerError(c, ErrMsgFailedToDelete, err.Error())
 		return
 	}
 
-	response.SuccessOK(c, constants.OrderDeletedMessage, nil)
-
-	logger.Info("Order deleted successfully",
+	ctxLogger := h.logger.WithContext(c)
+	ctxLogger.Info("Order cancelled",
 		zap.Uint("order_id", id),
-		zap.String("request_id", c.GetString("request_id")),
 	)
+
+	h.responseHelper.SuccessOK(c, "Order deleted successfully", nil)
 }
 
 // UpdateProduct godoc
@@ -217,22 +214,22 @@ func (h *Handler) DeleteOrder(c *gin.Context) {
 func (h *Handler) UpdateOrder(c *gin.Context) {
 	var input UpdateOrderRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.BadRequest(c, constants.InvalidInputMessage, err.Error())
+		h.responseHelper.BadRequest(c, response.ErrCodeValidationError, err.Error())
 		return
 	}
 
 	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
-		response.BadRequest(c, ErrMsgInvalidOrderID, err.Error())
+		h.responseHelper.BadRequest(c, ErrMsgInvalidOrderID, err.Error())
 		return
 	}
 
 	userID, err := h.getUserIDFromContext(c)
 	if err != nil {
 		if err.Error() == "missing user_id in context" {
-			response.Error(c, constants.StatusUnauthorized, constants.UnauthorizedMessage, constants.ErrorCodeValidation, err.Error())
+			h.responseHelper.Error(c, http.StatusUnauthorized, response.ErrCodeUnauthorized, response.ErrCodeUnauthorized, err.Error())
 		} else {
-			response.InternalServerError(c, ErrMsgInvalidUserContext, err.Error())
+			h.responseHelper.InternalServerError(c, ErrMsgInvalidUserContext, err.Error())
 		}
 		return
 	}
@@ -240,33 +237,33 @@ func (h *Handler) UpdateOrder(c *gin.Context) {
 	order, err := h.service.UpdateOrder(c.Request.Context(), id, input, userID)
 	if err != nil {
 		if err.Error() == ErrOrderNotFound {
-			response.NotFound(c, ErrMsgOrderNotFound, err.Error())
+			h.responseHelper.NotFound(c, ErrMsgOrderNotFound, err.Error())
 			return
 		}
 		if err.Error() == ErrNotAuthorizedToUpdate {
-			response.Error(c, constants.StatusUnauthorized, ErrMsgNotAuthorized, constants.ErrorCodeValidation, err.Error())
+			h.responseHelper.Error(c, http.StatusUnauthorized, ErrMsgNotAuthorized, response.ErrCodeUnauthorized, err.Error())
 			return
 		}
 		if err.Error() == ErrInvalidStatusValue {
-			response.BadRequest(c, ErrMsgInvalidStatus, err.Error())
+			h.responseHelper.BadRequest(c, ErrMsgInvalidStatus, err.Error())
 			return
 		}
 		if err.Error() == ErrInsufficientStockForUpdate {
-			response.BadRequest(c, ErrMsgInsufficientStock, err.Error())
+			h.responseHelper.BadRequest(c, ErrMsgInsufficientStock, err.Error())
 			return
 		}
-		response.InternalServerError(c, ErrMsgFailedToUpdate, err.Error())
+		h.responseHelper.InternalServerError(c, ErrMsgFailedToUpdate, err.Error())
 		return
 	}
 
-	response.SuccessOK(c, constants.OrderUpdatedMessage, order)
-
-	logger.Info("Order updated successfully",
+	ctxLogger := h.logger.WithContext(c)
+	ctxLogger.Info("Order status changed",
 		zap.Uint("order_id", order.ID),
 		zap.Uint("user_id", userID),
-		zap.Any("status", order.Status),
-		zap.String("request_id", c.GetString("request_id")),
+		zap.Any("new_status", order.Status),
 	)
+
+	h.responseHelper.SuccessOK(c, "Order updated successfully", order)
 }
 
 // Helpers

@@ -1,7 +1,6 @@
 package product
 
 import (
-	"mini-e-commerce/internal/constants"
 	"mini-e-commerce/internal/logger"
 	"mini-e-commerce/internal/middleware"
 	"mini-e-commerce/internal/response"
@@ -12,7 +11,6 @@ import (
 )
 
 const (
-	// Domain-specific error messages (keep local)
 	ErrMsgInvalidProductID = "Invalid product ID"
 	ErrMsgFailedToCreate   = "Failed to create product"
 	ErrMsgFailedToFetch    = "Failed to fetch products"
@@ -21,11 +19,17 @@ const (
 )
 
 type Handler struct {
-	service Service
+	service        Service
+	logger         logger.Logger
+	responseHelper *response.ResponseHelper
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service Service, log logger.Logger) *Handler {
+	return &Handler{
+		service:        service,
+		logger:         log,
+		responseHelper: response.NewResponseHelper(log),
+	}
 }
 
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup, rdb *redis.Client) {
@@ -52,25 +56,25 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup, rdb *redis.Client) {
 func (h *Handler) CreateProduct(c *gin.Context) {
 	var input CreateProductRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.BadRequest(c, constants.InvalidInputMessage, err.Error())
+		h.responseHelper.BadRequest(c, response.ErrCodeValidationError, err.Error())
 		return
 	}
 
 	product, err := h.service.CreateProduct(c.Request.Context(), input)
 	if err != nil {
-		response.InternalServerError(c, ErrMsgFailedToCreate, err.Error())
+		h.responseHelper.InternalServerError(c, ErrMsgFailedToCreate, err.Error())
 		return
 	}
 
-	response.SuccessCreated(c, constants.ProductCreatedMessage, product)
-
-	logger.Info("Product created successfully",
+	ctxLogger := h.logger.WithContext(c)
+	ctxLogger.Info("Product added to inventory",
 		zap.Uint("product_id", product.ID),
 		zap.String("product_name", product.Name),
 		zap.Int("price", product.Price),
-		zap.Int("stock", product.Stock),
-		zap.String("request_id", c.GetString("request_id")),
+		zap.Int("initial_stock", product.Stock),
 	)
+
+	h.responseHelper.SuccessCreated(c, "Product created successfully", product)
 }
 
 // GetAllProducts godoc
@@ -86,15 +90,11 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 func (h *Handler) GetAllProducts(c *gin.Context) {
 	products, err := h.service.GetAllProducts(c.Request.Context())
 	if err != nil {
-		response.InternalServerError(c, ErrMsgFailedToFetch, err.Error())
+		h.responseHelper.InternalServerError(c, ErrMsgFailedToFetch, err.Error())
 		return
 	}
-	response.SuccessOK(c, constants.ProductsRetrievedMessage, products)
+	h.responseHelper.SuccessOK(c, "List product retrieved successfully", products)
 
-	logger.Info("Products retrieved successfully",
-		zap.Int("count", len(products)),
-		zap.String("request_id", c.GetString("request_id")),
-	)
 }
 
 // GetProductByID godoc
@@ -113,23 +113,18 @@ func (h *Handler) GetAllProducts(c *gin.Context) {
 func (h *Handler) GetProductByID(c *gin.Context) {
 	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
-		response.BadRequest(c, ErrMsgInvalidProductID, err.Error())
+		h.responseHelper.BadRequest(c, ErrMsgInvalidProductID, err.Error())
 		return
 	}
 
 	product, err := h.service.GetProductByID(c.Request.Context(), id)
 	if err != nil {
-		response.NotFound(c, constants.ProductNotFoundMessage, err.Error())
+		h.responseHelper.NotFound(c, response.ErrCodeDataNotFound, err.Error())
 		return
 	}
 
-	response.SuccessOK(c, constants.ProductsRetrievedMessage, product)
+	h.responseHelper.SuccessOK(c, "Product retrieved successfully", product)
 
-	logger.Info("Product retrieved successfully",
-		zap.Uint("product_id", product.ID),
-		zap.String("product_name", product.Name),
-		zap.String("request_id", c.GetString("request_id")),
-	)
 }
 
 // UpdateProduct godoc
@@ -149,31 +144,31 @@ func (h *Handler) GetProductByID(c *gin.Context) {
 func (h *Handler) UpdateProduct(c *gin.Context) {
 	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
-		response.BadRequest(c, ErrMsgInvalidProductID, err.Error())
+		h.responseHelper.BadRequest(c, ErrMsgInvalidProductID, err.Error())
 		return
 	}
 
 	var input UpdateProductRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.BadRequest(c, constants.InvalidInputMessage, err.Error())
+		h.responseHelper.BadRequest(c, response.ErrCodeValidationError, err.Error())
 		return
 	}
 
 	product, err := h.service.UpdateProduct(c.Request.Context(), id, input)
 	if err != nil {
-		response.InternalServerError(c, ErrMsgFailedToUpdate, err.Error())
+		h.responseHelper.InternalServerError(c, ErrMsgFailedToUpdate, err.Error())
 		return
 	}
 
-	response.SuccessOK(c, constants.ProductUpdatedMessage, product)
-
-	logger.Info("Product updated successfully",
+	ctxLogger := h.logger.WithContext(c)
+	ctxLogger.Info("Product inventory updated",
 		zap.Uint("product_id", product.ID),
 		zap.String("product_name", product.Name),
-		zap.Int("price", product.Price),
-		zap.Int("stock", product.Stock),
-		zap.String("request_id", c.GetString("request_id")),
+		zap.Int("new_price", product.Price),
+		zap.Int("new_stock", product.Stock),
 	)
+
+	h.responseHelper.SuccessOK(c, "Product updated successfully", product)
 }
 
 // DeleteProduct godoc
@@ -192,19 +187,19 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 func (h *Handler) DeleteProduct(c *gin.Context) {
 	id, err := ParseIDFromString(c.Param("id"))
 	if err != nil {
-		response.BadRequest(c, ErrMsgInvalidProductID, err.Error())
+		h.responseHelper.BadRequest(c, ErrMsgInvalidProductID, err.Error())
 		return
 	}
 
 	if err := h.service.DeleteProduct(c.Request.Context(), id); err != nil {
-		response.InternalServerError(c, ErrMsgFailedToDelete, err.Error())
+		h.responseHelper.InternalServerError(c, ErrMsgFailedToDelete, err.Error())
 		return
 	}
 
-	response.SuccessOK(c, constants.ProductDeletedMessage, nil)
-
-	logger.Info("Product deleted successfully",
+	ctxLogger := h.logger.WithContext(c)
+	ctxLogger.Info("Product removed from inventory",
 		zap.Uint("product_id", id),
-		zap.String("request_id", c.GetString("request_id")),
 	)
+
+	h.responseHelper.SuccessOK(c, "Product deleted successfully", nil)
 }

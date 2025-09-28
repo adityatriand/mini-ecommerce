@@ -13,32 +13,32 @@ import (
 	"gorm.io/gorm"
 )
 
-func Connect(dsn string) *gorm.DB {
-	logger.Info("Connecting to database...")
+func Connect(dsn string, log logger.Logger) *gorm.DB {
+	log.Info("Connecting to database...")
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		logger.Fatal("Failed to connect database: ", zap.Error(err))
+		log.Fatal("Failed to connect database: ", zap.Error(err))
 	}
 
-	logger.Info("Database connection established successfully")
+	log.Info("Database connection established successfully")
 	return db
 }
 
-func Migrate(db *gorm.DB) error {
-	logger.Info("Starting database migration...")
+func Migrate(db *gorm.DB, log logger.Logger) error {
+	log.Info("Starting database migration...")
 
 	if err := db.AutoMigrate(&auth.User{}, &product.Product{}, &order.Order{}); err != nil {
-		logger.Error("Database migration failed", zap.Error(err))
+		log.Error("Database migration failed", zap.Error(err))
 		return err
 	}
 
-	logger.Info("Dataabse migration completed successfully")
+	log.Info("Database migration completed successfully")
 	return nil
 }
 
-func ConnectRedis(addr, password string) *redis.Client {
-	logger.Info("Connecting to Redis...", zap.String("addr", addr))
+func ConnectRedis(addr, password string, log logger.Logger) *redis.Client {
+	log.Info("Connecting to Redis...", zap.String("addr", addr))
 
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     addr,
@@ -47,9 +47,9 @@ func ConnectRedis(addr, password string) *redis.Client {
 	})
 
 	if _, err := rdb.Ping(context.Background()).Result(); err != nil {
-		logger.Fatal("Failed to connect redis: ", zap.Error(err), zap.String("addr", addr))
+		log.Fatal("Failed to connect redis: ", zap.Error(err), zap.String("addr", addr))
 	}
 
-	logger.Info("Redis connection established successfully")
+	log.Info("Redis connection established successfully")
 	return rdb
 }
