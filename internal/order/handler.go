@@ -4,11 +4,13 @@ import (
 	"errors"
 
 	"mini-e-commerce/internal/constants"
+	"mini-e-commerce/internal/logger"
 	"mini-e-commerce/internal/middleware"
 	"mini-e-commerce/internal/response"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -89,6 +91,16 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 	}
 
 	response.SuccessCreated(c, constants.OrderCreatedMessage, order)
+
+	logger.Info("Order created successfully",
+		zap.Uint("order_id", order.ID),
+		zap.Uint("user_id", userID),
+		zap.Uint("product_id", input.ProductID),
+		zap.Int("quantity", input.Quantity),
+		zap.Int("total_price", order.TotalPrice),
+		zap.String("request_id", c.GetString("request_id")),
+	)
+
 }
 
 // GetOrders godoc
@@ -108,6 +120,10 @@ func (h *Handler) GetOrders(c *gin.Context) {
 		return
 	}
 	response.SuccessOK(c, constants.OrdersRetrievedMessage, orders)
+	logger.Info("Orders retrieved successfully",
+		zap.Int("count", len(orders)),
+		zap.String("request_id", c.GetString("request_id")),
+	)
 }
 
 // GetOrderByID godoc
@@ -140,6 +156,10 @@ func (h *Handler) GetOrderByID(c *gin.Context) {
 		return
 	}
 	response.SuccessOK(c, constants.OrderRetrievedMessage, order)
+	logger.Info("Order retrieved successfully",
+		zap.Uint("order_id", order.ID),
+		zap.String("request_id", c.GetString("request_id")),
+	)
 }
 
 // DeleteOrder godoc
@@ -173,6 +193,11 @@ func (h *Handler) DeleteOrder(c *gin.Context) {
 	}
 
 	response.SuccessOK(c, constants.OrderDeletedMessage, nil)
+
+	logger.Info("Order deleted successfully",
+		zap.Uint("order_id", id),
+		zap.String("request_id", c.GetString("request_id")),
+	)
 }
 
 // UpdateProduct godoc
@@ -235,6 +260,13 @@ func (h *Handler) UpdateOrder(c *gin.Context) {
 	}
 
 	response.SuccessOK(c, constants.OrderUpdatedMessage, order)
+
+	logger.Info("Order updated successfully",
+		zap.Uint("order_id", order.ID),
+		zap.Uint("user_id", userID),
+		zap.Any("status", order.Status),
+		zap.String("request_id", c.GetString("request_id")),
+	)
 }
 
 // Helpers

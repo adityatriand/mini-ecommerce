@@ -2,11 +2,13 @@ package product
 
 import (
 	"mini-e-commerce/internal/constants"
+	"mini-e-commerce/internal/logger"
 	"mini-e-commerce/internal/middleware"
 	"mini-e-commerce/internal/response"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 const (
@@ -61,6 +63,14 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 	}
 
 	response.SuccessCreated(c, constants.ProductCreatedMessage, product)
+
+	logger.Info("Product created successfully",
+		zap.Uint("product_id", product.ID),
+		zap.String("product_name", product.Name),
+		zap.Int("price", product.Price),
+		zap.Int("stock", product.Stock),
+		zap.String("request_id", c.GetString("request_id")),
+	)
 }
 
 // GetAllProducts godoc
@@ -80,6 +90,11 @@ func (h *Handler) GetAllProducts(c *gin.Context) {
 		return
 	}
 	response.SuccessOK(c, constants.ProductsRetrievedMessage, products)
+
+	logger.Info("Products retrieved successfully",
+		zap.Int("count", len(products)),
+		zap.String("request_id", c.GetString("request_id")),
+	)
 }
 
 // GetProductByID godoc
@@ -109,6 +124,12 @@ func (h *Handler) GetProductByID(c *gin.Context) {
 	}
 
 	response.SuccessOK(c, constants.ProductsRetrievedMessage, product)
+
+	logger.Info("Product retrieved successfully",
+		zap.Uint("product_id", product.ID),
+		zap.String("product_name", product.Name),
+		zap.String("request_id", c.GetString("request_id")),
+	)
 }
 
 // UpdateProduct godoc
@@ -145,6 +166,14 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 	}
 
 	response.SuccessOK(c, constants.ProductUpdatedMessage, product)
+
+	logger.Info("Product updated successfully",
+		zap.Uint("product_id", product.ID),
+		zap.String("product_name", product.Name),
+		zap.Int("price", product.Price),
+		zap.Int("stock", product.Stock),
+		zap.String("request_id", c.GetString("request_id")),
+	)
 }
 
 // DeleteProduct godoc
@@ -173,4 +202,9 @@ func (h *Handler) DeleteProduct(c *gin.Context) {
 	}
 
 	response.SuccessOK(c, constants.ProductDeletedMessage, nil)
+
+	logger.Info("Product deleted successfully",
+		zap.Uint("product_id", id),
+		zap.String("request_id", c.GetString("request_id")),
+	)
 }
