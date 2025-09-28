@@ -3,6 +3,7 @@ package product
 import (
 	"context"
 	"errors"
+	"mini-e-commerce/internal/dto"
 
 	"github.com/go-playground/validator/v10"
 	"gorm.io/gorm"
@@ -15,6 +16,7 @@ const (
 type Service interface {
 	CreateProduct(ctx context.Context, input CreateProductRequest) (*Product, error)
 	GetAllProducts(ctx context.Context) ([]Product, error)
+	GetAllProductsWithQuery(ctx context.Context, query ProductQuery) (*ProductListResponse, error)
 	GetProductByID(ctx context.Context, id uint) (*Product, error)
 	UpdateProduct(ctx context.Context, id uint, input UpdateProductRequest) (*Product, error)
 	DeleteProduct(ctx context.Context, id uint) error
@@ -117,4 +119,54 @@ func (s *service) UpdateStock(ctx context.Context, id uint, stockDelta int) erro
 	}
 
 	return s.repo.Update(ctx, &product)
+}
+
+func (s *service) GetAllProductsWithQuery(ctx context.Context, query ProductQuery) (*ProductListResponse, error) {
+	page := query.Page
+	if page <= 0 {
+		page = 1
+	}
+
+	pageSize := query.PageSize
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	order := query.Order
+	if order != "asc" && order != "desc" {
+		order = "desc"
+	}
+
+	sortBy := query.SortBy
+	validSortFields := map[string]bool{
+		"id": true, "name": true, "price": true, "stock": true, "created_at": true,
+	}
+	if sortBy != "" && !validSortFields[sortBy] {
+		sortBy = "created_at"
+	}
+
+	offset := (page - 1) * pageSize
+
+	products, total, err := s.repo.FindAllWithPagination(ctx, offset, pageSize, sortBy, order)
+	if err != nil {
+		return nil, err
+	}
+
+	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+
+	response := &ProductListResponse{
+		Data: products,
+		Pagination: dto.PaginationMetadata{
+			Page:       page,
+			PageSize:   pageSize,
+			Total:      total,
+			TotalPages: totalPages,
+		},
+	}
+
+	return response, nil
 }

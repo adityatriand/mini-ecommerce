@@ -9,6 +9,7 @@ import (
 type Repository interface {
 	Create(ctx context.Context, order *Order) error
 	FindAll(ctx context.Context) ([]Order, error)
+	FindAllWithPagination(ctx context.Context, offset, limit int, sortBy, order string) ([]Order, int64, error)
 	FindByID(ctx context.Context, id uint) (Order, error)
 	Update(ctx context.Context, order *Order, updateFn func(*Order)) error
 	Delete(ctx context.Context, id uint) error
@@ -49,4 +50,24 @@ func (r *repository) Update(ctx context.Context, order *Order, updateFn func(*Or
 
 func (r *repository) Delete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&Order{}, id).Error
+}
+
+func (r *repository) FindAllWithPagination(ctx context.Context, offset, limit int, sortBy, order string) ([]Order, int64, error) {
+	var orders []Order
+	var total int64
+
+	db := r.db.WithContext(ctx).Model(&Order{})
+
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	if sortBy != "" && order != "" {
+		db = db.Order(sortBy + " " + order)
+	} else {
+		db = db.Order("created_at desc")
+	}
+
+	err := db.Offset(offset).Limit(limit).Find(&orders).Error
+	return orders, total, err
 }

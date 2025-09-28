@@ -35,7 +35,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_auth.LoginRequest"
+                            "$ref": "#/definitions/auth.LoginRequest"
                         }
                     }
                 ],
@@ -45,13 +45,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/mini-e-commerce_internal_response.SuccessResponse"
+                                    "$ref": "#/definitions/response.SuccessResponse"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_auth.AuthResponse"
+                                            "$ref": "#/definitions/auth.AuthResponse"
                                         }
                                     }
                                 }
@@ -61,13 +61,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -90,19 +90,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.SuccessResponse"
+                            "$ref": "#/definitions/response.SuccessResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -128,7 +128,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_auth.RegisterRequest"
+                            "$ref": "#/definitions/auth.RegisterRequest"
                         }
                     }
                 ],
@@ -138,13 +138,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/mini-e-commerce_internal_response.SuccessResponse"
+                                    "$ref": "#/definitions/response.SuccessResponse"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_auth.AuthResponse"
+                                            "$ref": "#/definitions/auth.AuthResponse"
                                         }
                                     }
                                 }
@@ -154,13 +154,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -179,38 +179,83 @@ const docTemplate = `{
                     "Orders"
                 ],
                 "summary": "Get all list order",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Sort order",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "id",
+                            "user_id",
+                            "product_id",
+                            "quantity",
+                            "total_price",
+                            "status",
+                            "created_at"
+                        ],
+                        "type": "string",
+                        "description": "Sort by field",
+                        "name": "sort_by",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/mini-e-commerce_internal_response.SuccessResponse"
+                                    "$ref": "#/definitions/response.SuccessResponse"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/internal_order.Order"
-                                            }
+                                            "$ref": "#/definitions/order.OrderListResponse"
                                         }
                                     }
                                 }
                             ]
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -234,7 +279,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_order.CreateOrderRequest"
+                            "$ref": "#/definitions/order.CreateOrderRequest"
                         }
                     }
                 ],
@@ -244,13 +289,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/mini-e-commerce_internal_response.SuccessResponse"
+                                    "$ref": "#/definitions/response.SuccessResponse"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_order.Order"
+                                            "$ref": "#/definitions/order.Order"
                                         }
                                     }
                                 }
@@ -260,19 +305,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -306,13 +351,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/mini-e-commerce_internal_response.SuccessResponse"
+                                    "$ref": "#/definitions/response.SuccessResponse"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_order.Order"
+                                            "$ref": "#/definitions/order.Order"
                                         }
                                     }
                                 }
@@ -322,25 +367,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -370,31 +415,31 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.SuccessResponse"
+                            "$ref": "#/definitions/response.SuccessResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -425,7 +470,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_order.UpdateOrderRequest"
+                            "$ref": "#/definitions/order.UpdateOrderRequest"
                         }
                     }
                 ],
@@ -435,13 +480,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/mini-e-commerce_internal_response.SuccessResponse"
+                                    "$ref": "#/definitions/response.SuccessResponse"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_order.Order"
+                                            "$ref": "#/definitions/order.Order"
                                         }
                                     }
                                 }
@@ -451,25 +496,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -477,7 +522,7 @@ const docTemplate = `{
         },
         "/products": {
             "get": {
-                "description": "Get a list of all products",
+                "description": "Get a list of all products with pagination and filtering",
                 "consumes": [
                     "application/json"
                 ],
@@ -488,38 +533,81 @@ const docTemplate = `{
                     "Products"
                 ],
                 "summary": "Get all products",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "Page size",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Sort order",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "id",
+                            "name",
+                            "price",
+                            "stock",
+                            "created_at"
+                        ],
+                        "type": "string",
+                        "description": "Sort by field",
+                        "name": "sort_by",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/mini-e-commerce_internal_response.SuccessResponse"
+                                    "$ref": "#/definitions/response.SuccessResponse"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/internal_product.Product"
-                                            }
+                                            "$ref": "#/definitions/product.ProductListResponse"
                                         }
                                     }
                                 }
                             ]
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -543,7 +631,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_product.CreateProductRequest"
+                            "$ref": "#/definitions/product.CreateProductRequest"
                         }
                     }
                 ],
@@ -553,13 +641,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/mini-e-commerce_internal_response.SuccessResponse"
+                                    "$ref": "#/definitions/response.SuccessResponse"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_product.Product"
+                                            "$ref": "#/definitions/product.Product"
                                         }
                                     }
                                 }
@@ -569,19 +657,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -615,13 +703,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/mini-e-commerce_internal_response.SuccessResponse"
+                                    "$ref": "#/definitions/response.SuccessResponse"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_product.Product"
+                                            "$ref": "#/definitions/product.Product"
                                         }
                                     }
                                 }
@@ -631,25 +719,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -679,31 +767,31 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.SuccessResponse"
+                            "$ref": "#/definitions/response.SuccessResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -734,7 +822,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_product.UpdateProductRequest"
+                            "$ref": "#/definitions/product.UpdateProductRequest"
                         }
                     }
                 ],
@@ -744,13 +832,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/mini-e-commerce_internal_response.SuccessResponse"
+                                    "$ref": "#/definitions/response.SuccessResponse"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_product.Product"
+                                            "$ref": "#/definitions/product.Product"
                                         }
                                     }
                                 }
@@ -760,25 +848,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -786,7 +874,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "internal_auth.AuthResponse": {
+        "auth.AuthResponse": {
             "type": "object",
             "properties": {
                 "email": {
@@ -797,7 +885,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_auth.LoginRequest": {
+        "auth.LoginRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -812,7 +900,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_auth.RegisterRequest": {
+        "auth.RegisterRequest": {
             "type": "object",
             "required": [
                 "email",
@@ -828,7 +916,24 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_order.CreateOrderRequest": {
+        "dto.PaginationMetadata": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "order.CreateOrderRequest": {
             "type": "object",
             "required": [
                 "product_id",
@@ -843,7 +948,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_order.Order": {
+        "order.Order": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -859,7 +964,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status": {
-                    "$ref": "#/definitions/internal_order.OrderStatus"
+                    "$ref": "#/definitions/order.OrderStatus"
                 },
                 "total_price": {
                     "type": "integer"
@@ -872,7 +977,21 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_order.OrderStatus": {
+        "order.OrderListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/order.Order"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/dto.PaginationMetadata"
+                }
+            }
+        },
+        "order.OrderStatus": {
             "type": "string",
             "enum": [
                 "PENDING",
@@ -885,7 +1004,7 @@ const docTemplate = `{
                 "StatusCancelled"
             ]
         },
-        "internal_order.UpdateOrderRequest": {
+        "order.UpdateOrderRequest": {
             "type": "object",
             "properties": {
                 "quantity": {
@@ -899,13 +1018,13 @@ const docTemplate = `{
                     ],
                     "allOf": [
                         {
-                            "$ref": "#/definitions/internal_order.OrderStatus"
+                            "$ref": "#/definitions/order.OrderStatus"
                         }
                     ]
                 }
             }
         },
-        "internal_product.CreateProductRequest": {
+        "product.CreateProductRequest": {
             "type": "object",
             "required": [
                 "name",
@@ -925,7 +1044,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_product.Product": {
+        "product.Product": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -948,7 +1067,21 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_product.UpdateProductRequest": {
+        "product.ProductListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/product.Product"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/dto.PaginationMetadata"
+                }
+            }
+        },
+        "product.UpdateProductRequest": {
             "type": "object",
             "properties": {
                 "name": {
@@ -963,7 +1096,7 @@ const docTemplate = `{
                 }
             }
         },
-        "mini-e-commerce_internal_response.ErrorInfo": {
+        "response.ErrorInfo": {
             "type": "object",
             "properties": {
                 "code": {
@@ -974,11 +1107,11 @@ const docTemplate = `{
                 }
             }
         },
-        "mini-e-commerce_internal_response.ErrorResponse": {
+        "response.ErrorResponse": {
             "type": "object",
             "properties": {
                 "error": {
-                    "$ref": "#/definitions/mini-e-commerce_internal_response.ErrorInfo"
+                    "$ref": "#/definitions/response.ErrorInfo"
                 },
                 "message": {
                     "type": "string"
@@ -988,7 +1121,7 @@ const docTemplate = `{
                 }
             }
         },
-        "mini-e-commerce_internal_response.SuccessResponse": {
+        "response.SuccessResponse": {
             "type": "object",
             "properties": {
                 "data": {},
