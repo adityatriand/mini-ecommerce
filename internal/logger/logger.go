@@ -13,6 +13,7 @@ type Logger interface {
 	Fatal(msg string, fields ...zap.Field)
 	Sync() error
 	WithContext(c any) ContextLogger
+	GetZapLogger() *zap.Logger
 }
 
 type ZapLogger struct {
@@ -88,4 +89,8 @@ func (l *ZapLogger) Sync() error {
 func (l *ZapLogger) WithContext(c any) ContextLogger {
 	requestID, userID := extractContextValues(c)
 	return NewContextLogger(l.logger, requestID, userID)
+}
+
+func (l *ZapLogger) GetZapLogger() *zap.Logger {
+	return l.logger
 }

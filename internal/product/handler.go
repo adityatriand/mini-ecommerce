@@ -1,12 +1,12 @@
 package product
 
 import (
+	"mini-e-commerce/internal/auth"
 	"mini-e-commerce/internal/logger"
 	"mini-e-commerce/internal/middleware"
 	"mini-e-commerce/internal/response"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -32,8 +32,9 @@ func NewHandler(service Service, log logger.Logger) *Handler {
 	}
 }
 
-func (h *Handler) RegisterRoutes(r *gin.RouterGroup, rdb *redis.Client) {
-	group := r.Group("/products", middleware.AuthMiddleware(rdb))
+func (h *Handler) RegisterRoutes(r *gin.RouterGroup, jwtManager *auth.JWTManager, sessionManager *auth.SessionManager, logger *zap.Logger) {
+	authMiddleware := middleware.AuthMiddleware(jwtManager, sessionManager, logger)
+	group := r.Group("/products", authMiddleware)
 	group.POST("", h.CreateProduct)
 	group.GET("", h.GetAllProducts)
 	group.GET("/:id", h.GetProductByID)
