@@ -15,6 +15,8 @@ type UpdateUserRequest struct {
 }
 
 type AuthResponse struct {
-	UserID uint   `json:"user_id"`
-	Email  string `json:"email"`
+	User         User   `json:"user"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	SessionID    string `json:"session_id"`
 }

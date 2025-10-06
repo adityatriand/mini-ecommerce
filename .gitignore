@@ -42,3 +42,4 @@ coverage.out
 # Config environment
 .env
 .env.*
+!.env.example

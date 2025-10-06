@@ -3,18 +3,15 @@ package auth
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 const (
-	SessionTimeout    = 3600 * time.Second
-	SessionKeyPrefix  = "session:"
 	MinPasswordLength = 8
 
 	// Error constants
@@ -27,9 +24,9 @@ const (
 
 type Service interface {
 	RegisterUser(ctx context.Context, input RegisterRequest) (*User, error)
-	LoginUser(ctx context.Context, input LoginRequest) (*User, string, error)
-	LogoutUser(ctx context.Context, sessionID string) error
-	ValidateSession(ctx context.Context, sessionID string) (uint, error)
+	LoginUser(ctx context.Context, input LoginRequest) (*AuthResponse, error)
+	RefreshToken(ctx context.Context, userID uint, sessionID, refreshToken string) (*AuthResponse, error)
+	LogoutUser(ctx context.Context, userID uint, sessionID string) error
 	GetUserByID(ctx context.Context, id uint) (*User, error)
 	UpdateUser(ctx context.Context, id uint, input UpdateUserRequest) (*User, error)
 	DeleteUser(ctx context.Context, id uint) error
@@ -37,16 +34,24 @@ type Service interface {
 }
 
 type service struct {
-	repo      Repository
-	rdb       *redis.Client
-	validator *validator.Validate
+	repo           Repository
+	jwtManager     *JWTManager
+	sessionManager *SessionManager
+	validator      *validator.Validate
+	logger         *zap.Logger
+	jwtExpiration  time.Duration
+	refreshExp     time.Duration
 }
 
-func NewService(repo Repository, rdb *redis.Client) Service {
+func NewService(repo Repository, jwtManager *JWTManager, sessionManager *SessionManager, logger *zap.Logger, jwtExp, refreshExp time.Duration) Service {
 	return &service{
-		repo:      repo,
-		rdb:       rdb,
-		validator: validator.New(),
+		repo:           repo,
+		jwtManager:     jwtManager,
+		sessionManager: sessionManager,
+		validator:      validator.New(),
+		logger:         logger,
+		jwtExpiration:  jwtExp,
+		refreshExp:     refreshExp,
 	}
 }
 
@@ -81,48 +86,98 @@ func (s *service) RegisterUser(ctx context.Context, input RegisterRequest) (*Use
 	return &user, nil
 }
 
-func (s *service) LoginUser(ctx context.Context, input LoginRequest) (*User, string, error) {
+func (s *service) LoginUser(ctx context.Context, input LoginRequest) (*AuthResponse, error) {
 	if err := s.validator.Struct(input); err != nil {
-		return nil, "", err
+		s.logger.Warn("Login validation failed", zap.Error(err))
+		return nil, err
 	}
 
 	user, err := s.repo.FindByEmail(ctx, input.Email)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, "", ErrInvalidCredentials
+			s.logger.Warn("Login attempt with non-existent email", zap.String("email", input.Email))
+			return nil, ErrInvalidCredentials
 		}
-		return nil, "", err
+		s.logger.Error("Failed to find user by email", zap.Error(err))
+		return nil, err
 	}
 
 	if !CheckPassword(user.Password, input.Password) {
-		return nil, "", ErrInvalidCredentials
+		s.logger.Warn("Invalid password attempt", zap.Uint("user_id", user.ID))
+		return nil, ErrInvalidCredentials
+	}
+
+	accessToken, err := s.jwtManager.Generate(user.ID)
+	if err != nil {
+		s.logger.Error("Failed to generate access token", zap.Error(err), zap.Uint("user_id", user.ID))
+		return nil, err
 	}
 
 	sessionID := uuid.New().String()
-	if err := s.rdb.Set(ctx, SessionKeyPrefix+sessionID, user.ID, SessionTimeout).Err(); err != nil {
-		return nil, "", err
+	refreshToken := uuid.New().String()
+
+	if err := s.sessionManager.StoreRefreshToken(ctx, user.ID, sessionID, refreshToken, s.refreshExp); err != nil {
+		s.logger.Error("Failed to store refresh token", zap.Error(err), zap.Uint("user_id", user.ID))
+		return nil, err
 	}
 
-	return &user, sessionID, nil
+	s.logger.Info("User logged in successfully",
+		zap.Uint("user_id", user.ID),
+		zap.String("email", user.Email),
+		zap.String("session_id", sessionID),
+	)
+
+	return &AuthResponse{
+		User:         user,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		SessionID:    sessionID,
+	}, nil
 }
 
-func (s *service) LogoutUser(ctx context.Context, sessionID string) error {
-	return s.rdb.Del(ctx, SessionKeyPrefix+sessionID).Err()
-}
+func (s *service) RefreshToken(ctx context.Context, userID uint, sessionID, refreshToken string) (*AuthResponse, error) {
+	if err := s.sessionManager.ValidateRefreshToken(ctx, userID, sessionID, refreshToken); err != nil {
+		s.logger.Warn("Invalid refresh token attempt",
+			zap.Error(err),
+			zap.Uint("user_id", userID),
+			zap.String("session_id", sessionID),
+		)
+		return nil, errors.New("invalid or expired refresh token")
+	}
 
-func (s *service) ValidateSession(ctx context.Context, sessionID string) (uint, error) {
-	userIDStr, err := s.rdb.Get(ctx, SessionKeyPrefix+sessionID).Result()
+	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
-		return 0, err
+		s.logger.Error("Failed to find user during token refresh", zap.Error(err), zap.Uint("user_id", userID))
+		return nil, errors.New(ErrUserNotFound)
 	}
 
-	// Parse user ID from redis value
-	userID := 0
-	if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil {
-		return 0, err
+	newAccessToken, err := s.jwtManager.Generate(user.ID)
+	if err != nil {
+		s.logger.Error("Failed to generate new access token", zap.Error(err), zap.Uint("user_id", user.ID))
+		return nil, err
 	}
 
-	return uint(userID), nil
+	s.logger.Info("Access token refreshed successfully",
+		zap.Uint("user_id", user.ID),
+		zap.String("session_id", sessionID),
+	)
+
+	return &AuthResponse{
+		User:         user,
+		AccessToken:  newAccessToken,
+		RefreshToken: refreshToken,
+		SessionID:    sessionID,
+	}, nil
+}
+
+func (s *service) LogoutUser(ctx context.Context, userID uint, sessionID string) error {
+	if err := s.sessionManager.DeleteRefreshToken(ctx, userID, sessionID); err != nil {
+		s.logger.Error("Failed to delete refresh token", zap.Error(err), zap.Uint("user_id", userID))
+		return err
+	}
+
+	s.logger.Info("User logged out successfully", zap.Uint("user_id", userID), zap.String("session_id", sessionID))
+	return nil
 }
 
 func (s *service) GetUserByID(ctx context.Context, id uint) (*User, error) {

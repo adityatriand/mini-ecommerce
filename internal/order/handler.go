@@ -4,12 +4,12 @@ import (
 	"errors"
 	"net/http"
 
+	"mini-e-commerce/internal/auth"
 	"mini-e-commerce/internal/logger"
 	"mini-e-commerce/internal/middleware"
 	"mini-e-commerce/internal/response"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -42,8 +42,9 @@ func NewHandler(service Service, log logger.Logger) *Handler {
 	}
 }
 
-func (h *Handler) RegisterRoutes(r *gin.RouterGroup, rdb *redis.Client) {
-	group := r.Group("/orders", middleware.AuthMiddleware(rdb))
+func (h *Handler) RegisterRoutes(r *gin.RouterGroup, jwtManager *auth.JWTManager, sessionManager *auth.SessionManager, logger *zap.Logger) {
+	authMiddleware := middleware.AuthMiddleware(jwtManager, sessionManager, logger)
+	group := r.Group("/orders", authMiddleware)
 
 	group.POST("", h.CreateOrder)
 	group.GET("", h.GetOrders)
