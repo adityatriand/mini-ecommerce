@@ -29,7 +29,10 @@ func main() {
 
 	swagger.SetupSwaggerInfo()
 
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Fatal("Failed to load config: ", zap.Error(err))
+	}
 	db := database.Connect(cfg.DatabaseUrl, logger)
 	if err := database.Migrate(db, logger); err != nil {
 		logger.Fatal("Failed to migrate database: ", zap.Error(err))
