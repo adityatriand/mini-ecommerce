@@ -33,7 +33,7 @@ func RegisterRoutes(r *gin.Engine, db *gorm.DB, rdb *redis.Client, log logger.Lo
 	productHandler.RegisterRoutes(api, jwtManager, sessionManager, log.GetZapLogger())
 
 	orderRepo := order.NewRepository(db)
-	orderService := order.NewService(orderRepo, productService)
+	orderService := order.NewService(orderRepo, productService, log)
 	orderHandler := order.NewHandler(orderService, log)
 	orderHandler.RegisterRoutes(api, jwtManager, sessionManager, log.GetZapLogger())
 

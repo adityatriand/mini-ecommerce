@@ -55,7 +55,7 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup, jwtManager *auth.JWTManager
 
 // CreateOrder godoc
 // @Summary Create new order
-// @Description Create new order with one product and quantity
+// @Description Create new order with multiple products
 // @Tags Orders
 // @Accept  json
 // @Produce  json
@@ -95,15 +95,6 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 		h.responseHelper.InternalServerError(c, ErrMsgFailedToProcess, err.Error())
 		return
 	}
-
-	ctxLogger := h.logger.WithContext(c)
-	ctxLogger.Info("Order placed",
-		zap.Uint("order_id", order.ID),
-		zap.Uint("user_id", userID),
-		zap.Uint("product_id", input.ProductID),
-		zap.Int("quantity", input.Quantity),
-		zap.Int("total_amount", order.TotalPrice),
-	)
 
 	h.responseHelper.SuccessCreated(c, "Order created successfully", order)
 
@@ -201,11 +192,6 @@ func (h *Handler) DeleteOrder(c *gin.Context) {
 		return
 	}
 
-	ctxLogger := h.logger.WithContext(c)
-	ctxLogger.Info("Order cancelled",
-		zap.Uint("order_id", id),
-	)
-
 	h.responseHelper.SuccessOK(c, "Order deleted successfully", nil)
 }
 
@@ -260,29 +246,22 @@ func (h *Handler) UpdateOrder(c *gin.Context) {
 			h.responseHelper.BadRequest(c, ErrMsgInvalidStatus, err.Error())
 			return
 		}
-		if err.Error() == ErrInsufficientStockForUpdate {
-			h.responseHelper.BadRequest(c, ErrMsgInsufficientStock, err.Error())
-			return
-		}
 		h.responseHelper.InternalServerError(c, ErrMsgFailedToUpdate, err.Error())
 		return
 	}
-
-	ctxLogger := h.logger.WithContext(c)
-	ctxLogger.Info("Order status changed",
-		zap.Uint("order_id", order.ID),
-		zap.Uint("user_id", userID),
-		zap.Any("new_status", order.Status),
-	)
 
 	h.responseHelper.SuccessOK(c, "Order updated successfully", order)
 }
 
 // Helpers
 func (h *Handler) getUserIDFromContext(c *gin.Context) (uint, error) {
-	userIDStr, ok := c.Get("user_id")
+	userID, ok := c.Get("user_id")
 	if !ok {
 		return 0, errors.New("missing user_id in context")
 	}
-	return ParseUserIDFromString(userIDStr.(string))
+	userIDUint, ok := userID.(uint)
+	if !ok {
+		return 0, errors.New("invalid user_id type in context")
+	}
+	return userIDUint, nil
 }

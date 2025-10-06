@@ -28,7 +28,7 @@ func Connect(dsn string, log logger.Logger) *gorm.DB {
 func Migrate(db *gorm.DB, log logger.Logger) error {
 	log.Info("Starting database migration...")
 
-	if err := db.AutoMigrate(&auth.User{}, &product.Product{}, &order.Order{}); err != nil {
+	if err := db.AutoMigrate(&auth.User{}, &product.Product{}, &order.Order{}, &order.OrderItem{}); err != nil {
 		log.Error("Database migration failed", zap.Error(err))
 		return err
 	}

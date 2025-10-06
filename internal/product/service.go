@@ -21,6 +21,7 @@ type Service interface {
 	UpdateProduct(ctx context.Context, id uint, input UpdateProductRequest) (*Product, error)
 	DeleteProduct(ctx context.Context, id uint) error
 	UpdateStock(ctx context.Context, id uint, stockDelta int) error
+	UpdateStockWithTx(tx *gorm.DB, id uint, stockDelta int) error
 }
 type service struct {
 	repo      Repository
@@ -119,6 +120,23 @@ func (s *service) UpdateStock(ctx context.Context, id uint, stockDelta int) erro
 	}
 
 	return s.repo.Update(ctx, &product)
+}
+
+func (s *service) UpdateStockWithTx(tx *gorm.DB, id uint, stockDelta int) error {
+	var product Product
+	if err := tx.First(&product, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New(ErrProductNotFound)
+		}
+		return err
+	}
+
+	product.Stock += stockDelta
+	if product.Stock < 0 {
+		return errors.New("insufficient stock")
+	}
+
+	return tx.Save(&product).Error
 }
 
 func (s *service) GetAllProductsWithQuery(ctx context.Context, query ProductQuery) (*ProductListResponse, error) {

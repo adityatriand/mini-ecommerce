@@ -5,22 +5,29 @@ import (
 	"errors"
 
 	"mini-e-commerce/internal/dto"
+	"mini-e-commerce/internal/logger"
 	"mini-e-commerce/internal/product"
 
 	"github.com/go-playground/validator/v10"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 const (
-	ErrOrderNotFound                     = "order not found"
-	ErrProductNotFound                   = "product not found"
-	ErrInsufficientStock                 = "insufficient stock"
-	ErrNotAuthorizedToUpdate             = "not authorized to update this order"
-	ErrInvalidStatusValue                = "invalid status value"
-	ErrCannotUpdateBothQuantityAndStatus = "cannot update both quantity and status simultaneously"
-	ErrCannotChangePaidOrderToPending    = "cannot change paid order back to pending"
-	ErrCannotChangeCancelledOrderStatus  = "cannot change cancelled order status"
-	ErrInsufficientStockForUpdate        = "insufficient stock for quantity update"
+	ErrOrderNotFound                    = "order not found"
+	ErrProductNotFound                  = "product not found"
+	ErrInsufficientStock                = "insufficient stock"
+	ErrNotAuthorizedToUpdate            = "not authorized to update this order"
+	ErrInvalidStatusValue               = "invalid status value"
+	ErrCannotChangePaidOrderToPending   = "cannot change paid order back to pending"
+	ErrCannotChangeCancelledOrderStatus = "cannot change cancelled order status"
+
+	DefaultPage      = 1
+	DefaultPageSize  = 10
+	MaxPageSize      = 100
+	MinQuantity      = 1
+	DefaultSortOrder = "desc"
+	DefaultSortField = "created_at"
 )
 
 type Service interface {
@@ -36,13 +43,15 @@ type service struct {
 	repo           Repository
 	productService product.Service
 	validator      *validator.Validate
+	logger         logger.Logger
 }
 
-func NewService(repo Repository, productService product.Service) Service {
+func NewService(repo Repository, productService product.Service, log logger.Logger) Service {
 	return &service{
 		repo:           repo,
 		productService: productService,
 		validator:      validator.New(),
+		logger:         log,
 	}
 }
 
@@ -55,31 +64,65 @@ func (s *service) CreateOrder(ctx context.Context, input CreateOrderRequest, use
 		return nil, errors.New("user ID is required")
 	}
 
-	product, err := s.productService.GetProductByID(ctx, input.ProductID)
-	if err != nil {
-		return nil, err
+	var orderItems []OrderItem
+	var totalPrice int
+	stockUpdates := make(map[uint]int)
+
+	for _, item := range input.Items {
+		product, err := s.productService.GetProductByID(ctx, item.ProductID)
+		if err != nil {
+			return nil, err
+		}
+
+		subtotal := item.Quantity * product.Price
+		orderItem := OrderItem{
+			ProductID: item.ProductID,
+			Quantity:  item.Quantity,
+			Price:     product.Price,
+			Subtotal:  subtotal,
+		}
+
+		orderItems = append(orderItems, orderItem)
+		totalPrice += subtotal
+		stockUpdates[item.ProductID] += item.Quantity
 	}
 
-	if input.Quantity > product.Stock {
-		return nil, errors.New(ErrInsufficientStock)
+	for productID, totalQuantity := range stockUpdates {
+		product, err := s.productService.GetProductByID(ctx, productID)
+		if err != nil {
+			return nil, err
+		}
+		if totalQuantity > product.Stock {
+			return nil, errors.New(ErrInsufficientStock)
+		}
 	}
 
 	order := Order{
 		UserID:     userID,
-		ProductID:  input.ProductID,
-		Quantity:   input.Quantity,
-		TotalPrice: input.Quantity * product.Price,
+		TotalPrice: totalPrice,
 		Status:     StatusPending,
+		OrderItems: orderItems,
 	}
 
-	// Reduce stock using product service
-	if err := s.productService.UpdateStock(ctx, input.ProductID, -input.Quantity); err != nil {
-		return nil, err
-	}
+	err := s.repo.CreateWithTransaction(ctx, &order, func(tx *gorm.DB) error {
+		for productID, quantity := range stockUpdates {
+			if err := s.productService.UpdateStockWithTx(tx, productID, -quantity); err != nil {
+				s.logger.Error("Failed to update stock in transaction",
+					zap.Uint("product_id", productID),
+					zap.Int("quantity", -quantity),
+					zap.Error(err),
+				)
+				return err
+			}
+		}
+		return nil
+	})
 
-	if err := s.repo.Create(ctx, &order); err != nil {
-		// Rollback stock if order creation fails
-		s.productService.UpdateStock(ctx, input.ProductID, input.Quantity)
+	if err != nil {
+		s.logger.Error("Order creation transaction failed",
+			zap.Uint("user_id", userID),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 
@@ -122,16 +165,8 @@ func (s *service) UpdateOrder(ctx context.Context, id uint, input UpdateOrderReq
 		return nil, err
 	}
 
-	if input.Quantity != nil && input.Status != nil {
-		return nil, errors.New(ErrCannotUpdateBothQuantityAndStatus)
-	}
-
 	if input.Status != nil {
 		return s.updateOrderStatus(ctx, &order, *input.Status)
-	}
-
-	if input.Quantity != nil {
-		return s.updateOrderQuantity(ctx, &order, *input.Quantity)
 	}
 
 	return &order, nil
@@ -146,12 +181,29 @@ func (s *service) DeleteOrder(ctx context.Context, id uint) error {
 		return err
 	}
 
-	// Restore stock when deleting order
-	if err := s.productService.UpdateStock(ctx, order.ProductID, order.Quantity); err != nil {
+	err = s.repo.DeleteWithTransaction(ctx, id, func(tx *gorm.DB) error {
+		for _, item := range order.OrderItems {
+			if err := s.productService.UpdateStockWithTx(tx, item.ProductID, item.Quantity); err != nil {
+				s.logger.Error("Failed to restore stock in transaction",
+					zap.Uint("product_id", item.ProductID),
+					zap.Int("quantity", item.Quantity),
+					zap.Error(err),
+				)
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		s.logger.Error("Order deletion transaction failed",
+			zap.Uint("order_id", id),
+			zap.Error(err),
+		)
 		return err
 	}
 
-	return s.repo.Delete(ctx, id)
+	return nil
 }
 
 // Helpers
@@ -175,40 +227,38 @@ func (s *service) validateStatusTransition(order *Order, newStatus *OrderStatus)
 
 func (s *service) updateOrderStatus(ctx context.Context, order *Order, newStatus OrderStatus) (*Order, error) {
 	if newStatus == StatusCancelled && order.Status != StatusCancelled {
-		// Restore stock when cancelling order
-		if err := s.productService.UpdateStock(ctx, order.ProductID, order.Quantity); err != nil {
+		err := s.repo.UpdateWithTransaction(ctx, order, func(o *Order) {
+			o.Status = newStatus
+		}, func(tx *gorm.DB) error {
+			for _, item := range order.OrderItems {
+				if err := s.productService.UpdateStockWithTx(tx, item.ProductID, item.Quantity); err != nil {
+					s.logger.Error("Failed to restore stock on cancellation",
+						zap.Uint("product_id", item.ProductID),
+						zap.Int("quantity", item.Quantity),
+						zap.Error(err),
+					)
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			s.logger.Error("Order cancellation transaction failed",
+				zap.Uint("order_id", order.ID),
+				zap.Error(err),
+			)
 			return nil, err
 		}
+		return order, nil
 	}
 
 	if err := s.repo.Update(ctx, order, func(o *Order) {
 		o.Status = newStatus
 	}); err != nil {
-		return nil, err
-	}
-	return order, nil
-}
-
-func (s *service) updateOrderQuantity(ctx context.Context, order *Order, newQuantity int) (*Order, error) {
-	product, err := s.productService.GetProductByID(ctx, order.ProductID)
-	if err != nil {
-		return nil, err
-	}
-
-	diff := newQuantity - order.Quantity
-	if diff > 0 && diff > product.Stock {
-		return nil, errors.New(ErrInsufficientStockForUpdate)
-	}
-
-	// Update stock based on quantity difference
-	if err := s.productService.UpdateStock(ctx, order.ProductID, -diff); err != nil {
-		return nil, err
-	}
-
-	if err := s.repo.Update(ctx, order, func(o *Order) {
-		o.Quantity = newQuantity
-		o.TotalPrice = newQuantity * product.Price
-	}); err != nil {
+		s.logger.Error("Failed to update order status",
+			zap.Uint("order_id", order.ID),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 
@@ -218,21 +268,21 @@ func (s *service) updateOrderQuantity(ctx context.Context, order *Order, newQuan
 func (s *service) GetAllOrdersWithQuery(ctx context.Context, query OrderQuery) (*OrderListResponse, error) {
 	page := query.Page
 	if page <= 0 {
-		page = 1
+		page = DefaultPage
 	}
 
 	pageSize := query.PageSize
 	if pageSize <= 0 {
-		pageSize = 10
+		pageSize = DefaultPageSize
 	}
 
-	if pageSize > 100 {
-		pageSize = 100
+	if pageSize > MaxPageSize {
+		pageSize = MaxPageSize
 	}
 
 	order := query.Order
 	if order != "asc" && order != "desc" {
-		order = "desc"
+		order = DefaultSortOrder
 	}
 
 	sortBy := query.SortBy
@@ -240,7 +290,7 @@ func (s *service) GetAllOrdersWithQuery(ctx context.Context, query OrderQuery) (
 		"id": true, "user_id": true, "product_id": true, "quantity": true, "total_price": true, "status": true, "created_at": true,
 	}
 	if sortBy != "" && !validSortFields[sortBy] {
-		sortBy = "created_at"
+		sortBy = DefaultSortField
 	}
 
 	offset := (page - 1) * pageSize
