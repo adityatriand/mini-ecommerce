@@ -2,6 +2,7 @@ package main
 
 import (
 	"mini-e-commerce/internal/auth"
+	"mini-e-commerce/internal/cache"
 	"mini-e-commerce/internal/config"
 	"mini-e-commerce/internal/database"
 	"mini-e-commerce/internal/logger"
@@ -39,6 +40,8 @@ func main() {
 	}
 	rdb := database.ConnectRedis(cfg.RedisAddr, cfg.RedisPassword, logger)
 
+	redisCache := cache.NewRedisCache(rdb, logger.GetZapLogger())
+
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTExpiration, logger.GetZapLogger())
 	sessionManager := auth.NewSessionManager(rdb, logger.GetZapLogger())
 
@@ -55,7 +58,7 @@ func main() {
 		logger.Fatal("Failed to set trusted proxies: ", zap.Error(err))
 	}
 
-	routes.RegisterRoutes(r, db, rdb, logger, jwtManager, sessionManager, &cfg)
+	routes.RegisterRoutes(r, db, redisCache, logger, jwtManager, sessionManager, &cfg)
 
 	port := cfg.Port
 	if port == "" {

@@ -3,14 +3,23 @@ package product
 import (
 	"context"
 	"errors"
+	"fmt"
+	"mini-e-commerce/internal/cache"
 	"mini-e-commerce/internal/dto"
+	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 const (
-	ErrProductNotFound = "product not found"
+	ErrProductNotFound  = "product not found"
+	CacheKeyProductByID = "product:id:%d"
+	CacheKeyProductList = "product:list:%d:%d:%s:%s" // page:pageSize:sortBy:order
+	CacheTTLProduct     = 5 * time.Minute
+	CacheTTLProductList = 2 * time.Minute
 )
 
 type Service interface {
@@ -25,14 +34,28 @@ type Service interface {
 }
 type service struct {
 	repo      Repository
+	cache     *cache.RedisCache
 	validator *validator.Validate
+	logger    *zap.Logger
 }
 
-func NewService(repo Repository) Service {
+func NewService(repo Repository, cache *cache.RedisCache, logger *zap.Logger) Service {
 	return &service{
 		repo:      repo,
+		cache:     cache,
 		validator: validator.New(),
+		logger:    logger,
 	}
+}
+
+func (s *service) invalidateProductCache(ctx context.Context, id uint) {
+	cacheKey := fmt.Sprintf(CacheKeyProductByID, id)
+	_ = s.cache.Delete(ctx, cacheKey)
+	_ = s.cache.DeletePattern(ctx, "product:list:*")
+}
+
+func (s *service) invalidateProductListCache(ctx context.Context) {
+	_ = s.cache.DeletePattern(ctx, "product:list:*")
 }
 
 func (s *service) GetAllProducts(ctx context.Context) ([]Product, error) {
@@ -40,13 +63,30 @@ func (s *service) GetAllProducts(ctx context.Context) ([]Product, error) {
 }
 
 func (s *service) GetProductByID(ctx context.Context, id uint) (*Product, error) {
-	product, err := s.repo.FindByID(ctx, id)
+	cacheKey := fmt.Sprintf(CacheKeyProductByID, id)
+	var product Product
+	err := s.cache.Get(ctx, cacheKey, &product)
+	if err == nil {
+		return &product, nil
+	}
+
+	if err != redis.Nil {
+		s.logger.Warn("Cache error on GetProductByID, falling back to database",
+			zap.Uint("product_id", id),
+			zap.Error(err),
+		)
+	}
+
+	product, err = s.repo.FindByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New(ErrProductNotFound)
 		}
 		return nil, err
 	}
+
+	_ = s.cache.Set(ctx, cacheKey, product, CacheTTLProduct)
+
 	return &product, nil
 }
 
@@ -63,6 +103,9 @@ func (s *service) CreateProduct(ctx context.Context, input CreateProductRequest)
 	if err := s.repo.Create(ctx, &product); err != nil {
 		return nil, err
 	}
+
+	s.invalidateProductListCache(ctx)
+
 	return &product, nil
 }
 
@@ -91,6 +134,9 @@ func (s *service) UpdateProduct(ctx context.Context, id uint, input UpdateProduc
 	if err := s.repo.Update(ctx, &product); err != nil {
 		return nil, err
 	}
+
+	s.invalidateProductCache(ctx, id)
+
 	return &product, nil
 }
 
@@ -102,7 +148,14 @@ func (s *service) DeleteProduct(ctx context.Context, id uint) error {
 		}
 		return err
 	}
-	return s.repo.Delete(ctx, id)
+
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	s.invalidateProductCache(ctx, id)
+
+	return nil
 }
 
 func (s *service) UpdateStock(ctx context.Context, id uint, stockDelta int) error {
@@ -119,7 +172,13 @@ func (s *service) UpdateStock(ctx context.Context, id uint, stockDelta int) erro
 		return errors.New("insufficient stock")
 	}
 
-	return s.repo.Update(ctx, &product)
+	if err := s.repo.Update(ctx, &product); err != nil {
+		return err
+	}
+
+	s.invalidateProductCache(ctx, id)
+
+	return nil
 }
 
 func (s *service) UpdateStockWithTx(tx *gorm.DB, id uint, stockDelta int) error {
@@ -136,7 +195,13 @@ func (s *service) UpdateStockWithTx(tx *gorm.DB, id uint, stockDelta int) error 
 		return errors.New("insufficient stock")
 	}
 
-	return tx.Save(&product).Error
+	if err := tx.Save(&product).Error; err != nil {
+		return err
+	}
+
+	s.invalidateProductCache(context.Background(), id)
+
+	return nil
 }
 
 func (s *service) GetAllProductsWithQuery(ctx context.Context, query ProductQuery) (*ProductListResponse, error) {
@@ -167,6 +232,21 @@ func (s *service) GetAllProductsWithQuery(ctx context.Context, query ProductQuer
 		sortBy = "created_at"
 	}
 
+	cacheKey := fmt.Sprintf(CacheKeyProductList, page, pageSize, sortBy, order)
+	var response ProductListResponse
+	err := s.cache.Get(ctx, cacheKey, &response)
+	if err == nil {
+		return &response, nil
+	}
+
+	if err != redis.Nil {
+		s.logger.Warn("Cache error on GetAllProductsWithQuery, falling back to database",
+			zap.Int("page", page),
+			zap.Int("page_size", pageSize),
+			zap.Error(err),
+		)
+	}
+
 	offset := (page - 1) * pageSize
 
 	products, total, err := s.repo.FindAllWithPagination(ctx, offset, pageSize, sortBy, order)
@@ -176,7 +256,7 @@ func (s *service) GetAllProductsWithQuery(ctx context.Context, query ProductQuer
 
 	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
 
-	response := &ProductListResponse{
+	response = ProductListResponse{
 		Data: products,
 		Pagination: dto.PaginationMetadata{
 			Page:       page,
@@ -186,5 +266,7 @@ func (s *service) GetAllProductsWithQuery(ctx context.Context, query ProductQuer
 		},
 	}
 
-	return response, nil
+	_ = s.cache.Set(ctx, cacheKey, response, CacheTTLProductList)
+
+	return &response, nil
 }
