@@ -1,0 +1,17 @@
+database:
+  url: postgresql://username:password@localhost:5432/dbname?sslmode=disable
+
+redis:
+  addr: localhost:6379
+  password: ""
+
+server:
+  port: "8080"
+  trusted_proxies:
+    - 127.0.0.1
+    - ::1
+
+jwt:
+  secret: your-secret-key-here
+  exp_minutes: 15
+  refresh_exp_hours: 168
