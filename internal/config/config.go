@@ -2,13 +2,10 @@ package config
 
 import (
 	"fmt"
-	"log"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/joho/godotenv"
+	"github.com/spf13/viper"
 )
 
 type Config struct {
@@ -23,58 +20,65 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
+	viper.AddConfigPath("./config")
+
+	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+	bindEnvVariables()
+
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return Config{}, fmt.Errorf("error reading config file: %w", err)
+		}
 	}
+
+	setDefaults()
 
 	var missingVars []string
 
-	databaseUrl := os.Getenv("DATABASE_URL")
+	databaseUrl := viper.GetString("database.url")
 	if databaseUrl == "" {
 		missingVars = append(missingVars, "DATABASE_URL")
 	}
 
-	redisAddr := os.Getenv("REDIS_ADDR")
+	redisAddr := viper.GetString("redis.addr")
 	if redisAddr == "" {
 		missingVars = append(missingVars, "REDIS_ADDR")
 	}
 
-	port := os.Getenv("PORT")
+	port := viper.GetString("server.port")
 	if port == "" {
 		missingVars = append(missingVars, "PORT")
 	}
 
-	jwtSecret := os.Getenv("JWT_SECRET")
+	jwtSecret := viper.GetString("jwt.secret")
 	if jwtSecret == "" {
 		missingVars = append(missingVars, "JWT_SECRET")
 	}
 
 	if len(missingVars) > 0 {
-		return Config{}, fmt.Errorf("missing required environment variables: %s", strings.Join(missingVars, ", "))
+		return Config{}, fmt.Errorf("missing required configuration: %s", strings.Join(missingVars, ", "))
 	}
 
-	proxies := os.Getenv("TRUSTED_PROXIES")
-	var trustedProxies []string
-	if proxies != "" {
-		for _, proxy := range strings.Split(proxies, ",") {
-			if trimmed := strings.TrimSpace(proxy); trimmed != "" {
-				trustedProxies = append(trustedProxies, trimmed)
-			}
-		}
-	} else {
+	trustedProxies := viper.GetStringSlice("server.trusted_proxies")
+	if len(trustedProxies) == 0 {
 		trustedProxies = []string{"127.0.0.1", "::1"}
 	}
 
-	jwtExpMinutes := getEnvAsInt("JWT_EXP_MINUTES", 15)
+	jwtExpMinutes := viper.GetInt("jwt.exp_minutes")
 	jwtExpiration := time.Duration(jwtExpMinutes) * time.Minute
 
-	refreshExpHours := getEnvAsInt("REFRESH_EXP_HOURS", 168)
+	refreshExpHours := viper.GetInt("jwt.refresh_exp_hours")
 	refreshExpiration := time.Duration(refreshExpHours) * time.Hour
 
 	return Config{
 		DatabaseUrl:       databaseUrl,
 		RedisAddr:         redisAddr,
-		RedisPassword:     os.Getenv("REDIS_PASSWORD"), // Optional, can be empty
+		RedisPassword:     viper.GetString("redis.password"),
 		Port:              port,
 		TrustedProxies:    trustedProxies,
 		JWTSecret:         jwtSecret,
@@ -83,17 +87,20 @@ func Load() (Config, error) {
 	}, nil
 }
 
-func getEnvAsInt(key string, defaultValue int) int {
-	valueStr := os.Getenv(key)
-	if valueStr == "" {
-		return defaultValue
-	}
+func bindEnvVariables() {
+	viper.BindEnv("database.url", "DATABASE_URL")
+	viper.BindEnv("redis.addr", "REDIS_ADDR")
+	viper.BindEnv("redis.password", "REDIS_PASSWORD")
+	viper.BindEnv("server.port", "PORT")
+	viper.BindEnv("server.trusted_proxies", "TRUSTED_PROXIES")
+	viper.BindEnv("jwt.secret", "JWT_SECRET")
+	viper.BindEnv("jwt.exp_minutes", "JWT_EXP_MINUTES")
+	viper.BindEnv("jwt.refresh_exp_hours", "REFRESH_EXP_HOURS")
+}
 
-	value, err := strconv.Atoi(valueStr)
-	if err != nil {
-		log.Printf("Invalid value for %s: %s, using default: %d", key, valueStr, defaultValue)
-		return defaultValue
-	}
-
-	return value
+func setDefaults() {
+	viper.SetDefault("server.port", "8080")
+	viper.SetDefault("server.trusted_proxies", []string{"127.0.0.1", "::1"})
+	viper.SetDefault("jwt.exp_minutes", 15)
+	viper.SetDefault("jwt.refresh_exp_hours", 168)
 }

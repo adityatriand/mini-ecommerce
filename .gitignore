@@ -43,3 +43,5 @@ coverage.out
 .env
 .env.*
 !.env.example
+config.yaml
+!config.yaml.example
