@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func RegisterRoutes(r *gin.Engine, db *gorm.DB, cache *cache.RedisCache, log logger.Logger, jwtManager *auth.JWTManager, sessionManager *auth.SessionManager, cfg *config.Config) {
+func RegisterRoutes(r *gin.Engine, db *gorm.DB, cache *cache.RedisCache, log logger.Logger, jwtManager auth.JWTManagerInterface, sessionManager auth.SessionManagerInterface, cfg *config.Config) {
 	api := r.Group("/api")
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

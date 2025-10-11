@@ -32,7 +32,7 @@ func NewHandler(service Service, log logger.Logger) *Handler {
 	}
 }
 
-func (h *Handler) RegisterRoutes(r *gin.RouterGroup, jwtManager *auth.JWTManager, sessionManager *auth.SessionManager, logger *zap.Logger) {
+func (h *Handler) RegisterRoutes(r *gin.RouterGroup, jwtManager auth.JWTManagerInterface, sessionManager auth.SessionManagerInterface, logger *zap.Logger) {
 	authMiddleware := middleware.AuthMiddleware(jwtManager, sessionManager, logger)
 	group := r.Group("/products", authMiddleware)
 	group.POST("", h.CreateProduct)

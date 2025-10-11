@@ -11,18 +11,25 @@ import (
 )
 
 var (
-	ErrSessionNotFound      = errors.New("session not found")
-	ErrInvalidRefreshToken  = errors.New("invalid refresh token")
-	ErrSessionStoreFailed   = errors.New("failed to store session")
-	ErrSessionDeleteFailed  = errors.New("failed to delete session")
+	ErrSessionNotFound     = errors.New("session not found")
+	ErrInvalidRefreshToken = errors.New("invalid refresh token")
+	ErrSessionStoreFailed  = errors.New("failed to store session")
+	ErrSessionDeleteFailed = errors.New("failed to delete session")
 )
+
+type SessionManagerInterface interface {
+	StoreRefreshToken(ctx context.Context, userID uint, sessionID, token string, ttl time.Duration) error
+	ValidateRefreshToken(ctx context.Context, userID uint, sessionID, token string) error
+	DeleteRefreshToken(ctx context.Context, userID uint, sessionID string) error
+	GetSessionKey(userID uint, sessionID string) string
+}
 
 type SessionManager struct {
 	client *redis.Client
 	logger *zap.Logger
 }
 
-func NewSessionManager(client *redis.Client, logger *zap.Logger) *SessionManager {
+func NewSessionManager(client *redis.Client, logger *zap.Logger) SessionManagerInterface {
 	return &SessionManager{
 		client: client,
 		logger: logger,
