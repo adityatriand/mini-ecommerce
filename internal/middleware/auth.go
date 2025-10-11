@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func AuthMiddleware(jwtManager *auth.JWTManager, sessionManager *auth.SessionManager, logger *zap.Logger) gin.HandlerFunc {
+func AuthMiddleware(jwtManager auth.JWTManagerInterface, sessionManager auth.SessionManagerInterface, logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 

@@ -13,6 +13,11 @@ var (
 	ErrExpiredToken = errors.New("token has expired")
 )
 
+type JWTManagerInterface interface {
+	Generate(userID uint) (string, error)
+	Verify(tokenStr string) (*UserClaims, error)
+}
+
 type JWTManager struct {
 	SecretKey     string
 	TokenDuration time.Duration
@@ -24,7 +29,7 @@ type UserClaims struct {
 	jwt.RegisteredClaims
 }
 
-func NewJWTManager(secret string, duration time.Duration, logger *zap.Logger) *JWTManager {
+func NewJWTManager(secret string, duration time.Duration, logger *zap.Logger) JWTManagerInterface {
 	return &JWTManager{
 		SecretKey:     secret,
 		TokenDuration: duration,
@@ -53,7 +58,7 @@ func (j *JWTManager) Generate(userID uint) (string, error) {
 }
 
 func (j *JWTManager) Verify(tokenStr string) (*UserClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &UserClaims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &UserClaims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrInvalidToken
 		}

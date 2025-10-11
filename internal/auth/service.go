@@ -35,15 +35,15 @@ type Service interface {
 
 type service struct {
 	repo           Repository
-	jwtManager     *JWTManager
-	sessionManager *SessionManager
+	jwtManager     JWTManagerInterface
+	sessionManager SessionManagerInterface
 	validator      *validator.Validate
 	logger         *zap.Logger
 	jwtExpiration  time.Duration
 	refreshExp     time.Duration
 }
 
-func NewService(repo Repository, jwtManager *JWTManager, sessionManager *SessionManager, logger *zap.Logger, jwtExp, refreshExp time.Duration) Service {
+func NewService(repo Repository, jwtManager JWTManagerInterface, sessionManager SessionManagerInterface, logger *zap.Logger, jwtExp, refreshExp time.Duration) Service {
 	return &service{
 		repo:           repo,
 		jwtManager:     jwtManager,
