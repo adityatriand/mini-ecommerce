@@ -1,4 +1,4 @@
-.PHONY: migrate-up migrate-down migrate-create migrate-force migrate-version setup install-hooks test test-auth test-product test-order pre-commit
+.PHONY: migrate-up migrate-down migrate-create migrate-force migrate-version setup install-hooks test test-auth test-product test-order pre-commit docker-build docker-up docker-down docker-logs docker-ps docker-clean
 
 migrate-up:
 	@echo "Running migrations..."
@@ -54,3 +54,38 @@ test-order:
 
 pre-commit:
 	@.githooks/pre-commit
+
+# Docker commands
+docker-build:
+	@echo "Building Docker images..."
+	@docker-compose build
+
+docker-up:
+	@echo "Starting all services..."
+	@docker-compose up -d
+	@echo "Services started! Access points:"
+	@echo "  - API: http://localhost:8080"
+	@echo "  - Swagger: http://localhost:8080/swagger/index.html"
+	@echo "  - Prometheus: http://localhost:9090"
+	@echo "  - Grafana: http://localhost:3000"
+
+docker-down:
+	@echo "Stopping all services..."
+	@docker-compose down
+
+docker-logs:
+	@docker-compose logs -f
+
+docker-ps:
+	@docker-compose ps
+
+docker-clean:
+	@echo "WARNING: This will remove all containers, volumes, and data!"
+	@read -p "Are you sure? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		docker-compose down -v; \
+		echo "Cleaned up successfully!"; \
+	else \
+		echo "Cancelled."; \
+	fi

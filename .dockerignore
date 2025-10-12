@@ -1,0 +1,71 @@
+# Git
+.git
+.gitignore
+.githooks
+.github
+
+# IDE
+.vscode
+.idea
+.claude
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+*.prof
+
+# Dependencies
+vendor/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Documentation
+*.md
+!README.md
+LICENSE
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Air (live reload)
+.air.toml
+tmp/
+
+# Test files (optional - remove if you want to run tests in container)
+*_test.go
+testdata/
+
+# Mac
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini

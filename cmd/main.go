@@ -5,7 +5,9 @@ import (
 	"mini-e-commerce/internal/cache"
 	"mini-e-commerce/internal/config"
 	"mini-e-commerce/internal/database"
+	"mini-e-commerce/internal/health"
 	"mini-e-commerce/internal/logger"
+	"mini-e-commerce/internal/metrics"
 	"mini-e-commerce/internal/middleware"
 	"mini-e-commerce/internal/swagger"
 	"mini-e-commerce/routes"
@@ -14,6 +16,7 @@ import (
 	"syscall"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
 
@@ -53,10 +56,18 @@ func main() {
 	r := gin.Default()
 	r.Use(middleware.RequestLogger(logger))
 	r.Use(middleware.ErrorLogger(logger))
+	r.Use(metrics.PrometheusMiddleware())
 
 	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 		logger.Fatal("Failed to set trusted proxies: ", zap.Error(err))
 	}
+
+	healthChecker := health.NewHealthChecker(db, rdb)
+	r.GET("/health", healthChecker.HealthCheck)
+	r.GET("/health/ready", healthChecker.ReadinessCheck)
+	r.GET("/health/live", healthChecker.LivenessCheck)
+
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	routes.RegisterRoutes(r, db, redisCache, logger, jwtManager, sessionManager, &cfg)
 

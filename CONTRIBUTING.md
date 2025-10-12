@@ -6,25 +6,54 @@ Thank you for contributing to this project!
 
 ### First Time Setup
 
-After cloning the repository, run:
+#### Option 1: Docker (Recommended)
+
+The fastest way to get started:
 
 ```bash
-make setup
+# Clone and setup
+git clone <repository-url>
+cd mini-e-commerce
+
+# Copy environment file
+cp .env.docker .env
+
+# Start all services
+make docker-up
 ```
 
-This configures:
+This starts the app, database, Redis, Prometheus, and Grafana.
+
+#### Option 2: Local Development
+
+For local development without Docker:
+
+```bash
+# Setup development environment
+make setup
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your local database/Redis credentials
+
+# Run migrations
+make migrate-up
+
+# Start the application
+go run cmd/main.go
+```
+
+### What Gets Configured
+
+The setup configures:
 - Git hooks path to use `.githooks` directory (version controlled)
 - Downloads Go dependencies
 - Installs development tools
 
-After setup, hooks work automatically because they are committed to the repository.
-
-### What Gets Configured
-
-The setup configures a pre-commit hook that:
+The pre-commit hook:
 - Runs tests for packages you modified
 - Prevents commits if tests fail
-- Only tests affected code (auth, product, or order)
+- Works dynamically with all test packages
 
 ## Development Workflow
 
@@ -49,21 +78,46 @@ The pre-commit hook will automatically run tests for affected packages.
 
 ### Running Tests
 
-Run all tests:
+Run all tests (187 test cases):
 ```bash
 make test
 ```
 
 Run specific package tests:
 ```bash
-make test-auth
-make test-product
-make test-order
+make test-auth      # Authentication tests
+make test-product   # Product tests
+make test-order     # Order tests
+make test-utils     # Utility tests
+make test-cache     # Cache tests
+make test-middleware # Middleware tests
 ```
 
 Test the pre-commit hook manually:
 ```bash
 make pre-commit
+```
+
+### Working with Docker
+
+Start services:
+```bash
+make docker-up
+```
+
+View logs:
+```bash
+make docker-logs
+```
+
+Stop services:
+```bash
+make docker-down
+```
+
+Check service status:
+```bash
+make docker-ps
 ```
 
 ### Commit Guidelines
@@ -88,15 +142,32 @@ Use this sparingly.
 
 ```
 .
-├── cmd/                  # Application entrypoints
+├── cmd/                    # Application entrypoints
 ├── internal/
-│   ├── auth/            # Authentication package
-│   ├── product/         # Product management
-│   └── order/           # Order management
+│   ├── auth/              # Authentication & user management
+│   ├── product/           # Product management
+│   ├── order/             # Order management
+│   ├── cache/             # Redis caching layer
+│   ├── config/            # Configuration with Viper
+│   ├── database/          # Database connection
+│   ├── health/            # Health check handlers
+│   ├── logger/            # Structured logging
+│   ├── metrics/           # Prometheus metrics
+│   ├── middleware/        # HTTP middleware
+│   ├── response/          # Response helpers
+│   ├── swagger/           # Swagger setup
+│   └── utils/             # Utility functions
+├── routes/                # Route registration
+├── migrations/            # Database migrations
+├── monitoring/            # Prometheus & Grafana configs
+│   ├── prometheus/        # Prometheus config
+│   └── grafana/           # Grafana dashboards
 ├── scripts/
-│   ├── hooks/           # Git hooks
-│   └── setup.sh         # Setup script
-└── Makefile             # Build commands
+│   ├── hooks/             # Git hooks
+│   └── setup.sh           # Setup script
+├── Dockerfile             # Docker image definition
+├── docker-compose.yml     # Multi-service orchestration
+└── Makefile               # Build & deployment commands
 ```
 
 ## Writing Tests
