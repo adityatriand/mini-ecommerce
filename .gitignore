@@ -43,5 +43,6 @@ coverage.out
 .env
 .env.*
 !.env.example
+!.env.docker
 config.yaml
 !config.yaml.example
