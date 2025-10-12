@@ -9,6 +9,13 @@ import (
 	"go.uber.org/zap"
 )
 
+type CacheInterface interface {
+	Get(ctx context.Context, key string, dest any) error
+	Set(ctx context.Context, key string, value any, ttl time.Duration) error
+	Delete(ctx context.Context, keys ...string) error
+	DeletePattern(ctx context.Context, pattern string) error
+}
+
 type RedisCache struct {
 	client *redis.Client
 	logger *zap.Logger

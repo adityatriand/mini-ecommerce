@@ -34,15 +34,15 @@ type Service interface {
 }
 type service struct {
 	repo      Repository
-	cache     *cache.RedisCache
+	cache     cache.CacheInterface
 	validator *validator.Validate
 	logger    *zap.Logger
 }
 
-func NewService(repo Repository, cache *cache.RedisCache, logger *zap.Logger) Service {
+func NewService(repo Repository, redisCache cache.CacheInterface, logger *zap.Logger) Service {
 	return &service{
 		repo:      repo,
-		cache:     cache,
+		cache:     redisCache,
 		validator: validator.New(),
 		logger:    logger,
 	}
