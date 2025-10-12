@@ -11,20 +11,23 @@ if [ -z "$STAGED_GO_FILES" ]; then
     exit 0
 fi
 
+# Collect unique packages from staged Go files
 PACKAGES_TO_TEST=""
+PACKAGE_DIRS=()
 
 for file in $STAGED_GO_FILES; do
-    if [[ $file == internal/auth/* ]]; then
-        if [[ ! $PACKAGES_TO_TEST =~ "internal/auth" ]]; then
-            PACKAGES_TO_TEST="$PACKAGES_TO_TEST ./internal/auth"
-        fi
-    elif [[ $file == internal/product/* ]]; then
-        if [[ ! $PACKAGES_TO_TEST =~ "internal/product" ]]; then
-            PACKAGES_TO_TEST="$PACKAGES_TO_TEST ./internal/product"
-        fi
-    elif [[ $file == internal/order/* ]]; then
-        if [[ ! $PACKAGES_TO_TEST =~ "internal/order" ]]; then
-            PACKAGES_TO_TEST="$PACKAGES_TO_TEST ./internal/order"
+    # Extract the directory (package) from the file path
+    package_dir=$(dirname "$file")
+
+    # Only process if it's a Go package (contains .go files)
+    if [[ -d "$package_dir" ]]; then
+        # Check if this package has test files
+        if ls "$package_dir"/*_test.go 1> /dev/null 2>&1; then
+            # Add package if not already in the list
+            if [[ ! " ${PACKAGE_DIRS[@]} " =~ " ${package_dir} " ]]; then
+                PACKAGE_DIRS+=("$package_dir")
+                PACKAGES_TO_TEST="$PACKAGES_TO_TEST ./$package_dir"
+            fi
         fi
     fi
 done
@@ -34,16 +37,21 @@ if [ -z "$PACKAGES_TO_TEST" ]; then
     exit 0
 fi
 
-echo "Running tests for packages:$PACKAGES_TO_TEST"
+echo "Running tests for affected packages with test files:$PACKAGES_TO_TEST"
 
 for package in $PACKAGES_TO_TEST; do
+    echo ""
+    echo "=========================================="
     echo "Testing $package..."
+    echo "=========================================="
     if ! go test $package -v; then
-        echo "Tests failed for $package"
+        echo ""
+        echo "❌ Tests failed for $package"
         echo "Commit aborted. Please fix the tests before committing."
         exit 1
     fi
 done
 
-echo "All tests passed!"
+echo ""
+echo "✅ All tests passed!"
 exit 0
