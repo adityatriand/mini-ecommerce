@@ -37,6 +37,7 @@ type Service interface {
 	GetOrderByID(ctx context.Context, id uint) (*Order, error)
 	UpdateOrder(ctx context.Context, id uint, input UpdateOrderRequest, userID uint) (*Order, error)
 	DeleteOrder(ctx context.Context, id uint) error
+	CreateOrderOptimized(ctx context.Context, input CreateOrderRequest, userID uint) (*Order, error)
 }
 
 type service struct {
@@ -313,4 +314,88 @@ func (s *service) GetAllOrdersWithQuery(ctx context.Context, query OrderQuery) (
 	}
 
 	return response, nil
+}
+
+func (s *service) CreateOrderOptimized(ctx context.Context, input CreateOrderRequest, userID uint) (*Order, error) {
+	if err := s.validator.Struct(input); err != nil {
+		return nil, err
+	}
+
+	if userID == 0 {
+		return nil, errors.New("user ID is required")
+	}
+
+	productIDs := make([]uint, 0, len(input.Items))
+	productQuantityMap := make(map[uint]int)
+	
+	for _, item := range input.Items {
+		productIDs = append(productIDs, item.ProductID)
+		productQuantityMap[item.ProductID] += item.Quantity
+	}
+
+	products, err := s.productService.GetProductsByIDs(ctx, productIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	productMap := make(map[uint]product.Product)
+	for _, p := range products {
+		productMap[p.ID] = p
+	}
+
+	var orderItems []OrderItem
+	var totalPrice int
+
+	for productID, quantity := range productQuantityMap {
+		p, exists := productMap[productID]
+		if !exists {
+			return nil, errors.New("product not found")
+		}
+
+		if quantity > p.Stock {
+			return nil, errors.New(ErrInsufficientStock)
+		}
+
+		subtotal := quantity * p.Price
+		orderItem := OrderItem{
+			ProductID: productID,
+			Quantity:  quantity,
+			Price:     p.Price,
+			Subtotal:  subtotal,
+		}
+
+		orderItems = append(orderItems, orderItem)
+		totalPrice += subtotal
+	}
+
+	order := Order{
+		UserID:     userID,
+		TotalPrice: totalPrice,
+		Status:     StatusPending,
+		OrderItems: orderItems,
+	}
+
+	err = s.repo.CreateWithTransaction(ctx, &order, func(tx *gorm.DB) error {
+		for productID, quantity := range productQuantityMap {
+			if err := s.productService.UpdateStockWithTx(tx, productID, -quantity); err != nil {
+				s.logger.Error("Failed to update stock in transaction",
+					zap.Uint("product_id", productID),
+					zap.Int("quantity", -quantity),
+					zap.Error(err),
+				)
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		s.logger.Error("Order creation transaction failed",
+			zap.Uint("user_id", userID),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+
+	return &order, nil
 }

@@ -151,6 +151,14 @@ func (m *MockProductService) UpdateStockWithTx(tx *gorm.DB, id uint, stockDelta 
 	return args.Error(0)
 }
 
+func (m *MockProductService) GetProductsByIDs(ctx context.Context, ids []uint) ([]product.Product, error) {
+	args := m.Called(ctx, ids)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]product.Product), args.Error(1)
+}
+
 func setupServiceTest() (*MockRepository, *MockProductService, Service) {
 	mockRepo := new(MockRepository)
 	mockProductService := new(MockProductService)
@@ -595,4 +603,96 @@ func TestService_GetAllOrdersWithQuery(t *testing.T) {
 		assert.Equal(t, 100, result.Pagination.PageSize)
 		mockRepo.AssertExpectations(t)
 	})
+}
+
+func TestService_CreateOrderOptimized(t *testing.T) {
+	tests := []struct {
+		name                string
+		input               CreateOrderRequest
+		userID              uint
+		mockProductsReturn  []product.Product
+		mockProductsError   error
+		mockRepoError       error
+		expectedError       bool
+		expectedErrorMsg    string
+	}{
+		{
+			name: "should create order successfully with optimized batch product fetching",
+			input: CreateOrderRequest{
+				Items: []OrderItemInput{
+					{ProductID: 1, Quantity: 2},
+					{ProductID: 2, Quantity: 1},
+				},
+			},
+			userID: 1,
+			mockProductsReturn: []product.Product{
+				{ID: 1, Name: "Product 1", Price: 100, Stock: 10},
+				{ID: 2, Name: "Product 2", Price: 200, Stock: 5},
+			},
+			mockProductsError: nil,
+			mockRepoError:     nil,
+			expectedError:     false,
+		},
+		{
+			name: "should return error when product not found",
+			input: CreateOrderRequest{
+				Items: []OrderItemInput{
+					{ProductID: 999, Quantity: 1},
+				},
+			},
+			userID:             1,
+			mockProductsReturn: []product.Product{},
+			mockProductsError:  nil,
+			mockRepoError:      nil,
+			expectedError:      true,
+			expectedErrorMsg:   "product not found",
+		},
+		{
+			name: "should return error when insufficient stock",
+			input: CreateOrderRequest{
+				Items: []OrderItemInput{
+					{ProductID: 1, Quantity: 100},
+				},
+			},
+			userID: 1,
+			mockProductsReturn: []product.Product{
+				{ID: 1, Name: "Product 1", Price: 100, Stock: 10},
+			},
+			mockProductsError: nil,
+			mockRepoError:     nil,
+			expectedError:     true,
+			expectedErrorMsg:   "insufficient stock",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo, mockProductService, service := setupServiceTest()
+
+			mockProductService.On("GetProductsByIDs", mock.Anything, mock.AnythingOfType("[]uint")).Return(tt.mockProductsReturn, tt.mockProductsError)
+
+			if !tt.expectedError {
+				mockRepo.On("CreateWithTransaction", mock.Anything, mock.AnythingOfType("*order.Order"), mock.AnythingOfType("func(*gorm.DB) error")).Return(tt.mockRepoError)
+				mockProductService.On("UpdateStockWithTx", mock.Anything, mock.AnythingOfType("uint"), mock.AnythingOfType("int")).Return(nil)
+			}
+
+			result, err := service.CreateOrderOptimized(context.Background(), tt.input, tt.userID)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+				if tt.expectedErrorMsg != "" {
+					assert.Contains(t, err.Error(), tt.expectedErrorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Equal(t, tt.userID, result.UserID)
+				assert.Equal(t, StatusPending, result.Status)
+			}
+
+			mockRepo.AssertExpectations(t)
+			mockProductService.AssertExpectations(t)
+		})
+	}
 }
