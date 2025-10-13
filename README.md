@@ -1,6 +1,6 @@
 # Mini E-Commerce
 
-A mini e-commerce backend application built with Go, Gin, PostgreSQL, and Redis with integrated monitoring using Prometheus and Grafana.
+A mini e-commerce backend application built with Go, Gin, PostgreSQL, and Redis with integrated monitoring using Prometheus, Grafana, and Loki.
 
 ## Features
 
@@ -13,6 +13,7 @@ A mini e-commerce backend application built with Go, Gin, PostgreSQL, and Redis 
 - ⚡ Redis caching for heavy endpoints
 - 📊 Prometheus metrics collection
 - 📈 Grafana dashboards for monitoring
+- 📝 Centralized logging with Loki
 - 🐳 Docker & Docker Compose support
 - ✅ Health check endpoints
 - 🧪 Comprehensive unit tests (187 test cases)
@@ -31,17 +32,21 @@ cd mini-e-commerce
 # Copy environment file
 cp .env.docker .env
 
-# Start all services (app, postgres, redis, prometheus, grafana)
+# Install Loki Docker plugin (one-time setup)
+docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
+
+# Start all services (app, postgres, redis, prometheus, grafana, loki)
 make docker-up
 ```
 
-That's it! All services will be running with monitoring enabled.
+That's it! All services will be running with monitoring and logging enabled.
 
 **Access points:**
 - API: http://localhost:8080
 - Swagger: http://localhost:8080/swagger/index.html
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3000 (admin/admin)
+- Loki: http://localhost:3100
 
 For detailed Docker setup instructions, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
 
@@ -161,6 +166,22 @@ The dashboard shows:
 - Memory and goroutine metrics
 - Database performance
 
+### Centralized Logging with Loki
+
+All container logs are automatically shipped to Loki via Docker logging driver.
+
+**View logs in Grafana:**
+1. Go to "Explore" in Grafana
+2. Select "Loki" datasource
+3. Query examples:
+   ```logql
+   {service="app"}                    # All app logs
+   {service="app"} |= "error"         # Errors only
+   {service="app"} | json | level="error"  # Parse JSON logs
+   ```
+
+For detailed Loki setup and usage, see [LOKI_SETUP.md](LOKI_SETUP.md).
+
 ## Development
 
 ### Running Tests
@@ -218,9 +239,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 │   └── utils/             # Utility functions
 ├── routes/                # Route registration
 ├── migrations/            # Database migrations (SQL)
-├── monitoring/            # Monitoring configurations
+├── monitoring/            # Monitoring & logging configurations
 │   ├── prometheus/        # Prometheus config
-│   └── grafana/           # Grafana dashboards & provisioning
+│   ├── grafana/           # Grafana dashboards & provisioning
+│   └── loki/              # Loki logging config
 ├── scripts/               # Utility scripts and hooks
 ├── docs/                  # Swagger documentation
 ├── Dockerfile             # Application container
@@ -265,7 +287,8 @@ make docker-clean       # Remove all containers and volumes (with confirmation)
 - PostgreSQL database
 - Redis cache
 - Prometheus (metrics)
-- Grafana (dashboards)
+- Loki (centralized logging)
+- Grafana (dashboards & log viewer)
 
 ## Technology Stack
 
@@ -282,7 +305,9 @@ make docker-clean       # Remove all containers and volumes (with confirmation)
 
 **Monitoring & Observability:**
 - Prometheus (metrics collection)
-- Grafana (visualization)
+- Loki (centralized logging)
+- Grafana (visualization & log viewing)
+- Structured logging with Zap
 - Custom business metrics
 - Health check endpoints
 
@@ -333,6 +358,7 @@ openssl rand -base64 32  # Generate JWT_SECRET
 ## Documentation
 
 - [DOCKER_SETUP.md](DOCKER_SETUP.md) - Complete Docker & monitoring setup guide
+- [LOKI_SETUP.md](LOKI_SETUP.md) - Centralized logging with Loki
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [Swagger UI](http://localhost:8080/swagger/index.html) - API documentation (when running)
 
