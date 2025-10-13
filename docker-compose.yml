@@ -19,6 +19,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-retries: "5"
+        loki-batch-size: "400"
+        labels: "service=postgres,environment=docker"
 
   # Redis Cache
   redis:
@@ -37,6 +44,13 @@ services:
       timeout: 3s
       retries: 5
     command: redis-server --appendonly yes
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-retries: "5"
+        loki-batch-size: "400"
+        labels: "service=redis,environment=docker"
 
   # Go Application
   app:
@@ -67,6 +81,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        loki-retries: "5"
+        loki-batch-size: "400"
+        labels: "service=app,environment=docker"
 
   # Prometheus for metrics collection
   prometheus:
@@ -89,6 +110,20 @@ services:
     depends_on:
       - app
 
+  # Loki for centralized logging
+  loki:
+    image: grafana/loki:latest
+    container_name: mini-ecommerce-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki:/etc/loki
+      - loki_data:/loki
+    command: -config.file=/etc/loki/loki-config.yml
+    networks:
+      - ecommerce-network
+
   # Grafana for metrics visualization
   grafana:
     image: grafana/grafana:latest
@@ -108,6 +143,7 @@ services:
       - ecommerce-network
     depends_on:
       - prometheus
+      - loki
 
 volumes:
   postgres_data:
@@ -117,6 +153,8 @@ volumes:
   prometheus_data:
     driver: local
   grafana_data:
+    driver: local
+  loki_data:
     driver: local
 
 networks:
