@@ -79,6 +79,14 @@ func (m *MockService) UpdateStockWithTx(tx *gorm.DB, id uint, stockDelta int) er
 	return args.Error(0)
 }
 
+func (m *MockService) GetProductsByIDs(ctx context.Context, ids []uint) ([]Product, error) {
+	args := m.Called(ctx, ids)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]Product), args.Error(1)
+}
+
 func setupHandlerTest() (*gin.Engine, *MockService, *Handler) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

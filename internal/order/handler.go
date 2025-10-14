@@ -82,7 +82,7 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	order, err := h.service.CreateOrder(c.Request.Context(), input, userID)
+	order, err := h.service.CreateOrderOptimized(c.Request.Context(), input, userID)
 	if err != nil {
 		if err.Error() == ErrProductNotFound {
 			h.responseHelper.NotFound(c, ErrMsgProductNotFound, err.Error())

@@ -68,6 +68,14 @@ func (m *MockService) DeleteOrder(ctx context.Context, id uint) error {
 	return args.Error(0)
 }
 
+func (m *MockService) CreateOrderOptimized(ctx context.Context, input CreateOrderRequest, userID uint) (*Order, error) {
+	args := m.Called(ctx, input, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*Order), args.Error(1)
+}
+
 func setupHandlerTest() (*gin.Engine, *MockService, *Handler) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -103,7 +111,7 @@ func TestHandler_CreateOrder(t *testing.T) {
 			Status:     StatusPending,
 		}
 
-		mockService.On("CreateOrder", mock.Anything, input, uint(1)).Return(expectedOrder, nil)
+		mockService.On("CreateOrderOptimized", mock.Anything, input, uint(1)).Return(expectedOrder, nil)
 
 		body, _ := json.Marshal(input)
 		req := httptest.NewRequest(http.MethodPost, "/orders", bytes.NewBuffer(body))
@@ -167,7 +175,7 @@ func TestHandler_CreateOrder(t *testing.T) {
 			},
 		}
 
-		mockService.On("CreateOrder", mock.Anything, input, uint(1)).
+		mockService.On("CreateOrderOptimized", mock.Anything, input, uint(1)).
 			Return(nil, errors.New(ErrProductNotFound))
 
 		body, _ := json.Marshal(input)
@@ -194,7 +202,7 @@ func TestHandler_CreateOrder(t *testing.T) {
 			},
 		}
 
-		mockService.On("CreateOrder", mock.Anything, input, uint(1)).
+		mockService.On("CreateOrderOptimized", mock.Anything, input, uint(1)).
 			Return(nil, errors.New(ErrInsufficientStock))
 
 		body, _ := json.Marshal(input)
@@ -221,7 +229,7 @@ func TestHandler_CreateOrder(t *testing.T) {
 			},
 		}
 
-		mockService.On("CreateOrder", mock.Anything, input, uint(1)).
+		mockService.On("CreateOrderOptimized", mock.Anything, input, uint(1)).
 			Return(nil, errors.New("database error"))
 
 		body, _ := json.Marshal(input)

@@ -31,6 +31,7 @@ type Service interface {
 	DeleteProduct(ctx context.Context, id uint) error
 	UpdateStock(ctx context.Context, id uint, stockDelta int) error
 	UpdateStockWithTx(tx *gorm.DB, id uint, stockDelta int) error
+	GetProductsByIDs(ctx context.Context, ids []uint) ([]Product, error)
 }
 type service struct {
 	repo      Repository
@@ -182,25 +183,15 @@ func (s *service) UpdateStock(ctx context.Context, id uint, stockDelta int) erro
 }
 
 func (s *service) UpdateStockWithTx(tx *gorm.DB, id uint, stockDelta int) error {
-	var product Product
-	if err := tx.First(&product, id).Error; err != nil {
+	err := s.repo.UpdateStockOptimizedWithTx(tx, id, stockDelta)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New(ErrProductNotFound)
 		}
 		return err
 	}
 
-	product.Stock += stockDelta
-	if product.Stock < 0 {
-		return errors.New("insufficient stock")
-	}
-
-	if err := tx.Save(&product).Error; err != nil {
-		return err
-	}
-
 	s.invalidateProductCache(context.Background(), id)
-
 	return nil
 }
 
@@ -269,4 +260,49 @@ func (s *service) GetAllProductsWithQuery(ctx context.Context, query ProductQuer
 	_ = s.cache.Set(ctx, cacheKey, response, CacheTTLProductList)
 
 	return &response, nil
+}
+
+func (s *service) GetProductsByIDs(ctx context.Context, ids []uint) ([]Product, error) {
+	if len(ids) == 0 {
+		return []Product{}, nil
+	}
+
+	// Additional security: limit the number of IDs to prevent potential DoS
+	if len(ids) > 1000 {
+		return nil, errors.New("too many IDs requested")
+	}
+
+	cachedProducts := make([]Product, 0, len(ids))
+	uncachedIDs := make([]uint, 0, len(ids))
+
+	for _, id := range ids {
+		cacheKey := fmt.Sprintf(CacheKeyProductByID, id)
+		var product Product
+		err := s.cache.Get(ctx, cacheKey, &product)
+		if err == nil {
+			cachedProducts = append(cachedProducts, product)
+		} else {
+			uncachedIDs = append(uncachedIDs, id)
+		}
+	}
+
+	var dbProducts []Product
+	if len(uncachedIDs) > 0 {
+		var err error
+		dbProducts, err = s.repo.FindMultipleByIDs(ctx, uncachedIDs)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, product := range dbProducts {
+			cacheKey := fmt.Sprintf(CacheKeyProductByID, product.ID)
+			_ = s.cache.Set(ctx, cacheKey, product, CacheTTLProduct)
+		}
+	}
+
+	allProducts := make([]Product, 0, len(cachedProducts)+len(dbProducts))
+	allProducts = append(allProducts, cachedProducts...)
+	allProducts = append(allProducts, dbProducts...)
+
+	return allProducts, nil
 }
