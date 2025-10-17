@@ -44,5 +44,16 @@ coverage.out
 .env.*
 !.env.example
 !.env.docker
+
+# Configuration files (contain sensitive data)
 config.yaml
 !config.yaml.example
+
+# Environment-specific configs (contain sensitive data)
+**/config.local.yaml
+**/config.development.yaml
+**/config.staging.yaml
+**/config.production.yaml
+
+# Keep only the template files
+!**/config.yaml.template

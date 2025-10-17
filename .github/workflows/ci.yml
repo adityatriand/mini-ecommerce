@@ -1,0 +1,212 @@
+name: CI/CD Pipeline for Mini E-Commerce Microservices
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  GO_VERSION: '1.24'
+  DOCKER_BUILDKIT: 1
+
+jobs:
+  test:
+    name: Test Microservices
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Run tests for shared libraries
+      run: |
+        cd shared
+        go test -v ./...
+
+    - name: Run tests for User Service
+      run: |
+        cd services/user
+        go test -v ./...
+
+    - name: Run tests for Product Service
+      run: |
+        cd services/product
+        go test -v ./...
+
+    - name: Run tests for Order Service
+      run: |
+        cd services/order
+        go test -v ./...
+
+    - name: Run tests for Gateway Service
+      run: |
+        cd services/gateway
+        go test -v ./...
+
+    - name: Run integration tests
+      run: |
+        make test-integration
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db?sslmode=disable
+        REDIS_ADDR: localhost:6379
+        JWT_SECRET: test-secret-key
+
+    - name: Generate test coverage
+      run: |
+        echo "mode: atomic" > coverage.txt
+        for service in user product order gateway; do
+          cd services/$service
+          go test -coverprofile=coverage.out -covermode=atomic ./...
+          if [ -f coverage.out ]; then
+            tail -n +2 coverage.out >> ../../coverage.txt
+            rm coverage.out
+          fi
+          cd ../..
+        done
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.txt
+        flags: unittests
+        name: codecov-umbrella
+
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+        args: --timeout=5m
+
+  build:
+    name: Build Microservices
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    
+    strategy:
+      matrix:
+        service: [gateway, user, product, order]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Build ${{ matrix.service }} service
+      run: |
+        cd services/${{ matrix.service }}
+        CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/main.go
+
+    - name: Test Docker build
+      run: |
+        docker build -f services/${{ matrix.service }}/Dockerfile -t mini-ecommerce-${{ matrix.service }}:test .
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Gosec Security Scanner
+      uses: securecodewarrior/github-action-gosec@master
+      with:
+        args: '-fmt sarif -out gosec.sarif ./...'
+
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: gosec.sarif
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [test, lint, build, security]
+    if: github.ref == 'refs/heads/develop'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to staging
+      run: |
+        echo "Deploying to staging environment..."
+        # Add your staging deployment commands here
+        # Example: kubectl apply -f deployments/kubernetes/staging/
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [test, lint, build, security]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production environment..."
+        # Add your production deployment commands here
+        # Example: kubectl apply -f deployments/kubernetes/production/
+

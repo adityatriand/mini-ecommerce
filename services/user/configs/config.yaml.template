@@ -1,0 +1,53 @@
+service_name: user-service
+port: "8001"
+environment: ${ENVIRONMENT:-development}
+log_level: ${LOG_LEVEL:-info}
+
+database:
+  url: ${DATABASE_URL:-postgresql://username:password@localhost:5432/mini_ecommerce_users?sslmode=disable}
+  max_open_conns: ${DATABASE_MAX_OPEN_CONNS:-25}
+  max_idle_conns: ${DATABASE_MAX_IDLE_CONNS:-5}
+  conn_max_lifetime: ${DATABASE_CONN_MAX_LIFETIME:-5m}
+
+redis:
+  addr: ${REDIS_ADDR:-localhost:6379}
+  password: ${REDIS_PASSWORD:-}
+  db: ${REDIS_DB:-0}
+
+jwt:
+  secret: ${JWT_SECRET:-your-jwt-secret-key-here}
+  expiration: ${JWT_EXPIRATION:-15m}
+  refresh_expiration: ${JWT_REFRESH_EXPIRATION:-168h}
+
+services:
+  user_service:
+    host: ${USER_SERVICE_HOST:-localhost}
+    port: ${USER_SERVICE_PORT:-8001}
+    url: ${USER_SERVICE_URL:-http://localhost:8001}
+  product_service:
+    host: ${PRODUCT_SERVICE_HOST:-localhost}
+    port: ${PRODUCT_SERVICE_PORT:-8002}
+    url: ${PRODUCT_SERVICE_URL:-http://localhost:8002}
+  order_service:
+    host: ${ORDER_SERVICE_HOST:-localhost}
+    port: ${ORDER_SERVICE_PORT:-8003}
+    url: ${ORDER_SERVICE_URL:-http://localhost:8003}
+  gateway_service:
+    host: ${GATEWAY_SERVICE_HOST:-localhost}
+    port: ${GATEWAY_SERVICE_PORT:-8000}
+    url: ${GATEWAY_SERVICE_URL:-http://localhost:8000}
+
+monitoring:
+  prometheus:
+    enabled: ${PROMETHEUS_ENABLED:-true}
+    port: ${PROMETHEUS_PORT:-9090}
+    path: ${PROMETHEUS_PATH:-/metrics}
+  grafana:
+    enabled: ${GRAFANA_ENABLED:-true}
+    url: ${GRAFANA_URL:-http://localhost:3000}
+    user: ${GRAFANA_USER:-admin}
+    pass: ${GRAFANA_PASS:-admin}
+  loki:
+    enabled: ${LOKI_ENABLED:-true}
+    url: ${LOKI_URL:-http://localhost:3100}
+

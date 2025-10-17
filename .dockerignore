@@ -13,6 +13,7 @@
 .env
 .env.*
 !.env.example
+!.env.microservices
 
 # Build artifacts
 bin/
@@ -24,12 +25,13 @@ bin/
 *.out
 coverage.out
 *.prof
+tmp/
+main
 
 # Dependencies
 vendor/
 
 # Temporary files
-tmp/
 temp/
 *.tmp
 *.swp
@@ -40,10 +42,11 @@ temp/
 *.log
 logs/
 
-# Documentation
+# Documentation (keep essential ones)
 *.md
 !README.md
-LICENSE
+!CONTRIBUTING.md
+!MICROSERVICES_*.md
 
 # Docker
 Dockerfile
@@ -57,7 +60,6 @@ Jenkinsfile
 
 # Air (live reload)
 .air.toml
-tmp/
 
 # Test files (optional - remove if you want to run tests in container)
 *_test.go
@@ -69,3 +71,14 @@ testdata/
 # Windows
 Thumbs.db
 desktop.ini
+
+# Microservices specific
+services/*/tmp/
+services/*/bin/
+services/*/coverage.out
+services/*/logs/
+
+# Shared libraries build artifacts
+shared/tmp/
+shared/bin/
+shared/coverage.out

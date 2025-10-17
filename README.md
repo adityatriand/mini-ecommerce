@@ -1,367 +1,464 @@
-# Mini E-Commerce
+# 🛒 Mini E-Commerce Microservices
 
-A mini e-commerce backend application built with Go, Gin, PostgreSQL, and Redis with integrated monitoring using Prometheus, Grafana, and Loki.
+A modern, scalable e-commerce platform built with Go microservices architecture, featuring user management, product catalog, order processing, and comprehensive monitoring.
 
-## Features
+## 🏗️ Architecture
 
-- 🔐 User authentication with JWT and session management
-- 📦 Product management with caching
-- 🛒 Order management
-- 🚀 RESTful API
-- 📚 Swagger documentation
-- 🗄️ Database migrations
-- ⚡ Redis caching for heavy endpoints
-- 📊 Prometheus metrics collection
-- 📈 Grafana dashboards for monitoring
-- 📝 Centralized logging with Loki
-- 🐳 Docker & Docker Compose support
-- ✅ Health check endpoints
-- 🧪 Comprehensive unit tests (187 test cases)
-
-## Getting Started
-
-### Quick Start with Docker (Recommended)
-
-The fastest way to get started is using Docker Compose:
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd mini-e-commerce
-
-# Copy environment file
-cp .env.docker .env
-
-# Install Loki Docker plugin (one-time setup)
-docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
-
-# Start all services (app, postgres, redis, prometheus, grafana, loki)
-make docker-up
+### Microservices Overview
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    API Gateway (8000)                      │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │  Routing │ Auth │ Rate Limiting │ Circuit Breaker      ││
+│  └─────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+         │              │              │              │
+    ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐
+    │  User   │   │Product  │   │ Order   │   │Monitoring│
+    │ Service │   │Service  │   │Service  │   │ Stack   │
+    │  (8001) │   │ (8002)  │   │ (8003)  │   │         │
+    └─────────┘   └─────────┘   └─────────┘   └─────────┘
+         │              │              │              │
+    ┌─────────┐   ┌─────────┘   ┌─────────┘   ┌─────────┐
+    │   DB    │   │    DB      │    DB      │Prometheus│
+    └─────────┘   └─────────┘   └─────────┘   └─────────┘
 ```
 
-That's it! All services will be running with monitoring and logging enabled.
+### Services
 
-**Access points:**
-- API: http://localhost:8080
-- Swagger: http://localhost:8080/swagger/index.html
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3000 (admin/admin)
-- Loki: http://localhost:3100
+| Service | Port | Description | Database |
+|---------|------|-------------|----------|
+| **API Gateway** | 8000 | Request routing, authentication, load balancing | - |
+| **User Service** | 8001 | User management, authentication, JWT/session handling | `users` |
+| **Product Service** | 8002 | Product catalog, inventory management, caching | `products` |
+| **Order Service** | 8003 | Order processing, status management, inter-service communication | `orders`, `order_items` |
 
-For detailed Docker setup instructions, see [DOCKER_SETUP.md](DOCKER_SETUP.md).
+### Technology Stack
 
-### Local Development Setup
+- **Language**: Go 1.24
+- **Framework**: Gin Web Framework
+- **Database**: PostgreSQL 16
+- **Cache**: Redis 7
+- **Authentication**: JWT + Session-based
+- **Monitoring**: Prometheus, Grafana, Loki
+- **Containerization**: Docker & Docker Compose
+- **Configuration**: Viper
+- **Logging**: Zap (Structured Logging)
 
-#### Prerequisites
+## 🚀 Quick Start
 
-- Go 1.22 or higher
-- PostgreSQL 14+
-- Redis 7+
+### Prerequisites
+
+- Go 1.24+
+- Docker & Docker Compose
 - Make
-- Docker & Docker Compose (for containerized deployment)
 
-#### Setup
-
-Clone the repository and run setup:
+### 1. Clone and Setup
 
 ```bash
 git clone <repository-url>
-cd mini-e-commerce
-make setup
+cd mini-ecommerce
+chmod +x scripts/setup-microservices.sh
+./scripts/setup-microservices.sh
 ```
 
-This will:
-- Install git hooks for automated testing
-- Download dependencies
-- Install development tools
-
-#### Configuration
-
-**For local development** (without Docker), copy the example file:
+### 2. Start Microservices
 
 ```bash
-cp .env.example .env
+# Start all services
+make dev-up
+
+# Check health
+make health-check
 ```
 
-Then update `.env` with your local database and Redis credentials:
-- `DATABASE_URL`: Point to your local PostgreSQL (e.g., `localhost:5432`)
-- `REDIS_ADDR`: Point to your local Redis (e.g., `localhost:6379`)
-- `JWT_SECRET`: Generate with `openssl rand -base64 32`
-
-**Note:** Use `.env.docker` template if running with Docker Compose (see Quick Start section).
-
-#### Database Migrations
-
-Run migrations:
+### 3. Test the API
 
 ```bash
-make migrate-up
+# Register a user
+curl -X POST http://localhost:8000/api/v1/users/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123","first_name":"Test","last_name":"User"}'
+
+# Login
+curl -X POST http://localhost:8000/api/v1/users/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}'
+
+# Create a product (requires auth)
+curl -X POST http://localhost:8000/api/v1/products \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test Product","price":1000,"stock":10,"category":"Electronics"}'
+
+# Create an order (requires auth)
+curl -X POST http://localhost:8000/api/v1/orders \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"items":[{"product_id":1,"quantity":2}]}'
 ```
 
-Create a new migration:
+## 🛠️ Available Commands
+
+### Development
+```bash
+make dev-up          # Start all microservices in development mode
+make dev-down        # Stop all microservices
+make dev-logs        # View logs from all services
+make dev-ps          # Show running containers
+```
+
+### Testing
+```bash
+make test-all        # Run tests for all services
+make test-user       # Run tests for user service
+make test-product    # Run tests for product service
+make test-order      # Run tests for order service
+make test-gateway    # Run tests for gateway service
+```
+
+### Building
+```bash
+make build-all       # Build all services
+make build-user      # Build user service
+make build-product   # Build product service
+make build-order     # Build order service
+make build-gateway   # Build gateway service
+```
+
+### Database Migrations
+```bash
+make migrate-all     # Run migrations for all services
+make migrate-user    # Run migrations for user service
+make migrate-product # Run migrations for product service
+make migrate-order   # Run migrations for order service
+```
+
+### Configuration
+```bash
+make config-generate # Generate configuration files for current environment
+make config-local    # Generate configuration files for local environment
+make config-dev      # Generate configuration files for development environment
+make config-staging  # Generate configuration files for staging environment
+make config-prod     # Generate configuration files for production environment
+```
+
+### Utilities
+```bash
+make clean           # Clean up containers and volumes
+make help            # Show all available commands
+```
+
+## 📊 Monitoring & Observability
+
+### Access Points
+
+- **API Gateway**: http://localhost:8000
+- **Prometheus**: http://localhost:9090
+- **Grafana**: http://localhost:3000 (admin/admin)
+- **Loki**: http://localhost:3100
+
+### Health Checks
+
+- **Gateway**: http://localhost:8000/health
+- **User Service**: http://localhost:8001/health
+- **Product Service**: http://localhost:8002/health
+- **Order Service**: http://localhost:8003/health
+
+## 🛠️ Development
+
+### Project Structure
+
+```
+mini-ecommerce/
+├── services/                    # Microservices
+│   ├── gateway/                # API Gateway
+│   ├── user/                   # User Service
+│   ├── product/                # Product Service
+│   └── order/                  # Order Service
+├── shared/                     # Shared Libraries
+│   ├── config/                 # Configuration management
+│   ├── logger/                 # Logging utilities
+│   ├── database/               # Database utilities
+│   ├── cache/                  # Cache utilities
+│   ├── response/               # Response helpers
+│   └── middleware/             # Common middleware
+├── deployments/                # Deployment configs
+│   ├── docker/
+│   └── monitoring/
+├── scripts/                    # Setup and utility scripts
+└── Makefile      # Microservices commands
+```
+
+### Development Commands
 
 ```bash
-make migrate-create name=your_migration_name
+# Service Management
+make dev-up          # Start all services
+make dev-down        # Stop all services
+make dev-logs        # View logs
+make health-check    # Check health
+
+# Individual Services
+make dev-up-user     # Start user service
+make dev-up-product  # Start product service
+make dev-up-order    # Start order service
+make dev-up-gateway  # Start gateway
+
+# Building
+make build-all       # Build all services
+make build-user      # Build user service
+
+# Testing
+make test-all        # Test all services
+make test-user       # Test user service
+
+# Logs
+make logs-user       # View user service logs
+make logs-product    # View product service logs
 ```
 
-#### Running the Application Locally
+### Configuration
 
+**🔒 Secure Template-Based Configuration**
+
+The project uses a secure template-based configuration system to protect sensitive data:
+
+#### Configuration Strategy
+- **Templates only**: `config.yaml.template` files contain environment variable placeholders
+- **No hardcoded configs**: No `config.yaml` files with sensitive data are committed to git
+- **Environment-specific**: Generated configs are created from templates with actual values
+- **Version control**: Only templates are committed, never actual configs with secrets
+
+#### Generate Configuration Files
 ```bash
-go run cmd/main.go
+# Generate for specific environment
+make config-local     # Local development
+make config-dev       # Development environment
+make config-staging   # Staging environment
+make config-prod      # Production environment
+
+# Or use environment variable
+ENVIRONMENT=production ./scripts/generate-configs.sh
 ```
 
-The server will start on the port specified in your configuration (default: 8080).
-
-## API Documentation
-
-After starting the server, visit:
-
-```
-http://localhost:8080/swagger/index.html
-```
-
-## Health Checks
-
-The application provides health check endpoints for monitoring and orchestration:
-
-- `GET /health` - Simple health check
-- `GET /health/ready` - Readiness probe (checks database & Redis connectivity)
-- `GET /health/live` - Liveness probe
-
-Example:
+#### Environment Variables
+Create `.env.microservices` file with your actual secrets:
 ```bash
-curl http://localhost:8080/health/ready
+# Database
+DATABASE_URL=postgresql://user:secure_password@localhost:5432/db?sslmode=disable
+
+# JWT
+JWT_SECRET=your-super-secure-jwt-secret-key-here
+
+# Redis
+REDIS_PASSWORD=your-redis-password
+
+# Environment
+ENVIRONMENT=development
+LOG_LEVEL=info
 ```
 
-## Monitoring & Metrics
-
-### Prometheus Metrics
-
-Metrics are available at `/metrics` endpoint:
-```bash
-curl http://localhost:8080/metrics
+#### File Structure
+```
+services/
+├── user/
+│   └── configs/
+│       ├── config.yaml.template          # Template (committed)
+│       ├── config.local.yaml            # Generated (ignored)
+│       ├── config.development.yaml      # Generated (ignored)
+│       ├── config.staging.yaml          # Generated (ignored)
+│       └── config.production.yaml       # Generated (ignored)
 ```
 
-**Available metrics:**
-- `http_requests_total` - Total HTTP requests by method, path, and status
-- `http_request_duration_seconds` - Request duration histogram
-- `cache_hits_total` / `cache_misses_total` - Cache performance
-- `db_queries_total` - Database query counts
-- `orders_created_total` - Business metrics
-- `auth_attempts_total` - Authentication metrics
-- Plus 50+ Go runtime metrics
+#### Security Features
+- ✅ No sensitive data in version control
+- ✅ Environment-specific configurations
+- ✅ Automatic secret generation
+- ✅ Environment variable overrides
+- ✅ Clear error messages when configs are missing
 
-### Grafana Dashboards
+## 🔐 Authentication
 
-When running with Docker, Grafana is pre-configured with dashboards:
+### Authentication Flow
 
-1. Open http://localhost:3000
-2. Login: `admin` / `admin`
-3. View "Mini E-Commerce Dashboard"
+1. **User Registration/Login** → User Service
+2. **JWT Token Generation** → User Service
+3. **Token Validation** → API Gateway
+4. **Request Routing** → Backend Services
 
-The dashboard shows:
-- Request rate and latency (p95, p99)
-- HTTP status code distribution
-- Cache hit/miss rates
-- Memory and goroutine metrics
-- Database performance
+### Supported Authentication Methods
 
-### Centralized Logging with Loki
+- **JWT Tokens** (Primary)
+- **Session-based** (Fallback)
+- **Refresh Tokens** (Automatic renewal)
 
-All container logs are automatically shipped to Loki via Docker logging driver.
+## 📈 API Endpoints
 
-**View logs in Grafana:**
-1. Go to "Explore" in Grafana
-2. Select "Loki" datasource
-3. Query examples:
-   ```logql
-   {service="app"}                    # All app logs
-   {service="app"} |= "error"         # Errors only
-   {service="app"} | json | level="error"  # Parse JSON logs
-   ```
+### Public Endpoints
+- `POST /api/v1/users/register` - User registration
+- `POST /api/v1/users/login` - User login
 
-For detailed Loki setup and usage, see [LOKI_SETUP.md](LOKI_SETUP.md).
+### Protected Endpoints (Require Authentication)
 
-## Development
+#### User Management
+- `GET /api/v1/users/:id` - Get user by ID
+- `PUT /api/v1/users/:id` - Update user
+- `DELETE /api/v1/users/:id` - Delete user
+- `GET /api/v1/users` - Get all users
+
+#### Product Management
+- `GET /api/v1/products` - Get products
+- `POST /api/v1/products` - Create product
+- `PUT /api/v1/products/:id` - Update product
+- `DELETE /api/v1/products/:id` - Delete product
+- `PATCH /api/v1/products/:id/stock` - Update stock
+
+#### Order Management
+- `GET /api/v1/orders` - Get orders
+- `POST /api/v1/orders` - Create order
+- `PUT /api/v1/orders/:id` - Update order
+- `DELETE /api/v1/orders/:id` - Delete order
+
+## 🔄 Inter-Service Communication
+
+### Communication Patterns
+
+- **Synchronous HTTP** - REST APIs for client requests
+- **Inter-service HTTP** - Service-to-service communication
+- **Service Discovery** - Docker networking for service location
+
+### Example: Order Creation Flow
+
+```
+Client → Gateway → Order Service → Product Service (stock validation)
+                ↓
+            Order Service → Product Service (stock update)
+                ↓
+            Order Service → Database (order creation)
+```
+
+## 🧪 Testing
 
 ### Running Tests
 
-Run all tests:
 ```bash
-make test
+# All services
+make test-all
+
+# Individual services
+make test-user
+make test-product
+make test-order
+make test-gateway
 ```
 
-Run specific package tests:
+### Test Coverage
+
+- **Unit Tests** - Individual service components
+- **Integration Tests** - Service-to-service communication
+- **End-to-End Tests** - Complete user workflows
+
+## 🚀 Deployment
+
+### Docker Deployment
+
 ```bash
-make test-auth      # Authentication tests
-make test-product   # Product tests
-make test-order     # Order tests
+# Build and start all services
+make build-all
+make dev-up
 ```
 
-**Test Coverage:** 187 test cases across 6 packages:
-- `internal/auth` - 25 tests
-- `internal/product` - 44 tests
-- `internal/order` - 58 tests
-- `internal/utils` - 21 tests
-- `internal/middleware` - 21 tests
-- `internal/cache` - 18 tests
+### Production Considerations
 
-### Git Hooks
+- **Environment Variables** - Set production values
+- **Database Security** - Use strong passwords and SSL
+- **JWT Secrets** - Use cryptographically secure secrets
+- **Monitoring** - Enable all monitoring components
+- **Logging** - Configure appropriate log levels
 
-Pre-commit hooks are automatically installed during setup. They will:
-- Run tests for packages you modified
-- Prevent commits if tests fail
-- Keep the codebase stable
-- Work dynamically with all packages
+## 🔧 Troubleshooting
 
-### Contributing
+### Common Issues
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
+1. **Service Not Starting**
+   ```bash
+   make logs-user
+   curl http://localhost:8001/health
+   ```
 
-## Project Structure
+2. **Database Connection Issues**
+   ```bash
+   docker-compose -f deployments/docker/docker-compose.microservices.yml ps postgres
+   ```
 
-```
-.
-├── cmd/                    # Application entrypoints
-├── internal/
-│   ├── auth/              # Authentication & user management
-│   ├── product/           # Product management
-│   ├── order/             # Order management
-│   ├── cache/             # Redis caching layer
-│   ├── config/            # Configuration management
-│   ├── database/          # Database connection & migrations
-│   ├── health/            # Health check handlers
-│   ├── logger/            # Structured logging
-│   ├── metrics/           # Prometheus metrics
-│   ├── middleware/        # HTTP middleware (auth, logging, metrics)
-│   ├── response/          # Response helpers
-│   ├── swagger/           # Swagger setup
-│   └── utils/             # Utility functions
-├── routes/                # Route registration
-├── migrations/            # Database migrations (SQL)
-├── monitoring/            # Monitoring & logging configurations
-│   ├── prometheus/        # Prometheus config
-│   ├── grafana/           # Grafana dashboards & provisioning
-│   └── loki/              # Loki logging config
-├── scripts/               # Utility scripts and hooks
-├── docs/                  # Swagger documentation
-├── Dockerfile             # Application container
-├── docker-compose.yml     # Multi-container orchestration
-└── .dockerignore          # Docker build exclusions
-```
+3. **Authentication Issues**
+   ```bash
+   curl -X POST http://localhost:8000/api/v1/users/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@example.com","password":"password123"}'
+   ```
 
-## Available Commands
+### Debug Commands
 
-### Development Commands
 ```bash
-make setup              # Setup development environment
-make install-hooks      # Install git hooks
-make test               # Run all tests
-make test-auth          # Run auth package tests
-make test-product       # Run product package tests
-make test-order         # Run order package tests
-make pre-commit         # Run pre-commit checks manually
+# View all container logs
+make dev-logs
+
+# Check service health
+make health-check
+
+# View container status
+make dev-ps
 ```
 
-### Database Commands
-```bash
-make migrate-up         # Run database migrations
-make migrate-down       # Rollback last migration
-make migrate-create     # Create new migration (requires name=xxx)
-make migrate-force      # Force migration version (requires version=N)
-make migrate-version    # Show current migration version
-```
+## 🔮 Future Enhancements
 
-### Docker Commands
-```bash
-make docker-build       # Build Docker images
-make docker-up          # Start all services (app, db, redis, monitoring)
-make docker-down        # Stop all services
-make docker-logs        # View logs from all services
-make docker-ps          # Show running containers
-make docker-clean       # Remove all containers and volumes (with confirmation)
-```
+### Planned Features
 
-**Docker services include:**
-- Application (Go API)
-- PostgreSQL database
-- Redis cache
-- Prometheus (metrics)
-- Loki (centralized logging)
-- Grafana (dashboards & log viewer)
+1. **Event-Driven Architecture**
+   - Message queues (RabbitMQ/Kafka)
+   - Event sourcing
+   - CQRS pattern
 
-## Technology Stack
+2. **Advanced Monitoring**
+   - Distributed tracing (Jaeger)
+   - APM integration
+   - Custom business metrics
 
-**Backend:**
-- Go 1.22
-- Gin Web Framework
-- GORM (ORM)
-- JWT & Session-based Authentication
+3. **Security Enhancements**
+   - OAuth2/OIDC integration
+   - Rate limiting per user
+   - API versioning
 
-**Database & Cache:**
-- PostgreSQL 16
-- Redis 7
-- golang-migrate (migrations)
+4. **Scalability**
+   - Kubernetes deployment
+   - Auto-scaling
+   - Service mesh (Istio)
 
-**Monitoring & Observability:**
-- Prometheus (metrics collection)
-- Loki (centralized logging)
-- Grafana (visualization & log viewing)
-- Structured logging with Zap
-- Custom business metrics
-- Health check endpoints
+## 📚 Documentation
 
-**Development & Testing:**
-- testify (testing framework)
-- go-sqlmock (database mocking)
-- miniredis (Redis mocking)
-- Air (live reload)
-- Pre-commit hooks
+- **`MICROSERVICES_COMPLETE.md`** - Complete implementation guide
+- **`MICROSERVICES_MIGRATION.md`** - Migration from monolithic
+- **`services/README.md`** - Service architecture details
+- **`Makefile`** - All available commands
 
-**DevOps:**
-- Docker & Docker Compose
-- Multi-stage builds
-- Health checks
-- Graceful shutdown
+## 🤝 Contributing
 
-**Documentation:**
-- Swagger/OpenAPI
-- Comprehensive README
-- Docker setup guide
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
 
-## Environment Configuration
+## 📄 License
 
-The project uses environment variables for configuration. Two template files are provided:
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-| File | Purpose | Use When |
-|------|---------|----------|
-| `.env.docker` | Docker deployment template | Running with `docker-compose` |
-| `.env.example` | Local development template | Running locally without Docker |
+## 🆘 Support
 
-### Key Differences:
+For questions or issues, please open a GitHub issue or contact the development team.
 
-**`.env.docker`** uses Docker service names:
-- `DATABASE_URL`: `postgres:5432` (container name)
-- `REDIS_ADDR`: `redis:6379` (container name)
-- `TRUSTED_PROXIES`: `0.0.0.0/0` (Docker network)
+---
 
-**`.env.example`** uses localhost:
-- `DATABASE_URL`: `localhost:5432` (local machine)
-- `REDIS_ADDR`: `localhost:6379` (local machine)
-- `TRUSTED_PROXIES`: `127.0.0.1,::1` (localhost only)
-
-Both files contain placeholders - generate secure secrets for production:
-```bash
-openssl rand -base64 32  # Generate JWT_SECRET
-```
-
-## Documentation
-
-- [DOCKER_SETUP.md](DOCKER_SETUP.md) - Complete Docker & monitoring setup guide
-- [LOKI_SETUP.md](LOKI_SETUP.md) - Centralized logging with Loki
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
-- [Swagger UI](http://localhost:8080/swagger/index.html) - API documentation (when running)
-
-## License
-
-MIT
+**Built with ❤️ using Go microservices architecture**
