@@ -51,3 +51,4 @@ monitoring:
     enabled: ${LOKI_ENABLED:-true}
     url: ${LOKI_URL:-http://localhost:3100}
 
+
